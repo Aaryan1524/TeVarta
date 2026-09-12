@@ -2,6 +2,23 @@
 
 This playbook turns the frozen MVP into small, reviewable deliveries for two founders. It complements `TEVARTA_MVP_BUILD_v2.1.md`; it does not revise product scope or architecture.
 
+## Branch and review model
+
+`main` is the sole integration branch and stays runnable. Work branches directly from current `main` and returns through a PR to `main`; there are no permanent founder or `dev` branches.
+
+```text
+main
+├── aaryan/phase-1/t01-execution-inputs
+├── aaditya/phase-1/t02-repo-ci
+└── aaditya/phase-1/t03-api-contract
+```
+
+Use `<owner>/phase-<n>/t<nn>-<outcome>`. Create only the next unblocked task branch rather than pre-creating a phase. For example, Phase 1 starts with `aaryan/phase-1/t01-execution-inputs`; it then opens the task branches that T01 unblocks, including Aaditya's T02/T03 work and Aaryan's T05/T07 work.
+
+Aaditya opens a draft PR after the first reviewable slice and keeps pushing to that branch. Aaryan is automatically requested as reviewer, watches the updates, is the sole code reviewer, and performs the merge when the PR is ready. A separate `dev` environment may exist for previews, but no `dev` branch is needed.
+
+The frozen MVP has one evidence-quality exception: accepted curated graph edges still need Aaditya's human acceptance of source evidence and rationale. That acceptance does not make Aaditya a general code reviewer.
+
 ## 1. Phase start
 
 The build-planning agent prepares the phase brief in GitHub Projects before implementation. Keep it short:
@@ -69,7 +86,7 @@ Small mechanical commits may use only a clear subject. Never include AI attribut
 
 ## 4. Pull request review
 
-The human reviewer checks the diff and runs or validates the relevant evidence. Curated edges require two human eyes. A model review is additional evidence, not approval.
+Aaryan checks Aaditya's diff and runs or validates the relevant evidence. Curated edges require Aaryan's code review plus Aaditya's evidence acceptance. A model review is additional evidence, not approval.
 
 Merge only when:
 

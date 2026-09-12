@@ -26,8 +26,10 @@ Evidence:
 
 MVP sections:
 
+Required code reviewer: @Aaryan1524
+
 Risks or accepted tradeoffs:
 
 Advisor findings and disposition, when required:
 
-<!-- Curated graph edges require human acceptance and two-person review. -->
+<!-- Curated graph edges also require Aaditya's evidence acceptance. -->
