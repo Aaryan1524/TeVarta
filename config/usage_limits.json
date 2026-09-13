@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "alerts": {
+    "search_usage_ratio": 0.8
+  },
+  "limits": {
+    "search": {
+      "monthly_query_cap": 1500,
+      "enforcement": "hard_cap_before_dispatch"
+    }
+  },
+  "reporting_components": [
+    "search",
+    "embeddings",
+    "llm_compile",
+    "llm_render_why",
+    "compute",
+    "postgres",
+    "neo4j",
+    "redis",
+    "r2"
+  ]
+}
