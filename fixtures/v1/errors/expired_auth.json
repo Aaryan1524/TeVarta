@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "expired_auth",
+    "message": "Your session has expired. Refresh your session and try again.",
+    "request_id": "req_fixture_expired_auth",
+    "details": null
+  }
+}

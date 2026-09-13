@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: tevarta-api
+Version: 0.1.0
+Summary: Te Varta API and worker foundation
+Requires-Python: >=3.12
+Requires-Dist: alembic<2,>=1.13
+Requires-Dist: celery<6,>=5.4
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: pydantic<3,>=2.9
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Provides-Extra: dev
+Requires-Dist: httpx<1,>=0.27; extra == "dev"
+Requires-Dist: pytest<9,>=8.3; extra == "dev"
+Requires-Dist: pytest-cov<7,>=5; extra == "dev"
+Requires-Dist: ruff<1,>=0.6; extra == "dev"

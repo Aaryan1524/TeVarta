@@ -1,0 +1,23 @@
+{
+  "requested_event_id": "evt_fremont_initial",
+  "event": {
+    "event_id": "evt_fremont_halt",
+    "revision": 2,
+    "category": "SUPPLY CHAIN",
+    "title": "Fremont plant halts production",
+    "why": "Affects your TSLA — Tesla operates the Fremont plant, which has halted production.",
+    "score": 81,
+    "confidence": 0.94,
+    "hops": 2,
+    "importance": 0.8,
+    "published_at": "2026-09-12T08:45:00Z",
+    "article_count": 4,
+    "primary_source": "company_ir",
+    "entities": [{"id": "ent_tsla", "name": "Tesla Inc", "entity_type": "company", "ticker": "TSLA", "lifecycle": "live"}],
+    "path": ["Fremont Factory", "Tesla Inc", "TSLA"],
+    "slot_type": "graph",
+    "slot_position": 1
+  },
+  "articles": [{"id": "art_company_ir", "publisher": "Tesla Investor Relations", "title": "Fremont plant update", "url": "https://www.tesla.com/ir", "published_at": "2026-09-12T08:45:00Z"}],
+  "merged_from": ["evt_fremont_initial"]
+}

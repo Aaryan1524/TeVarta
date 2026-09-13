@@ -1,0 +1,4 @@
+{
+  "entity": {"id": "ent_tsla", "name": "Tesla Inc", "entity_type": "company", "ticker": "TSLA", "lifecycle": "live"},
+  "graph_status": "live"
+}

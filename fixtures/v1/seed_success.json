@@ -1,0 +1,8 @@
+{
+  "created": true,
+  "seed": {
+    "entity": {"id": "ent_tsla", "name": "Tesla Inc", "entity_type": "company", "ticker": "TSLA", "lifecycle": "live"},
+    "weight": 1.0,
+    "source": "manual"
+  }
+}
