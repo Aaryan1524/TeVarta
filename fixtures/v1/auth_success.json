@@ -1,0 +1,7 @@
+{
+  "access_token": "fixture-access-token",
+  "refresh_token": "fixture-refresh-token",
+  "token_type": "Bearer",
+  "expires_at": "2026-09-12T13:00:00Z",
+  "user": {"id": "usr_fixture", "timezone": "America/New_York"}
+}

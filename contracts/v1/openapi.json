@@ -1,0 +1,1985 @@
+{
+  "components": {
+    "schemas": {
+      "AccountDeletionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "scheduled",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AccountDeletionResponse",
+        "type": "object"
+      },
+      "AppleAuthRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "authorization_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Code"
+          },
+          "identity_token": {
+            "minLength": 1,
+            "title": "Identity Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_token"
+        ],
+        "title": "AppleAuthRequest",
+        "type": "object"
+      },
+      "AuthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "title": "Token Type",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_at",
+          "user"
+        ],
+        "title": "AuthResponse",
+        "type": "object"
+      },
+      "DeviceCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "apns_token": {
+            "minLength": 1,
+            "title": "Apns Token",
+            "type": "string"
+          },
+          "platform": {
+            "const": "ios",
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apns_token",
+          "platform"
+        ],
+        "title": "DeviceCreateRequest",
+        "type": "object"
+      },
+      "DeviceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^dev_[A-Za-z0-9_-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "registered"
+        ],
+        "title": "DeviceResponse",
+        "type": "object"
+      },
+      "EntityCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_type": {
+            "enum": [
+              "company",
+              "place",
+              "commodity",
+              "regulator",
+              "security"
+            ],
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^ent_[A-Za-z0-9_-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle": {
+            "enum": [
+              "catalog",
+              "live"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "entity_type",
+          "lifecycle"
+        ],
+        "title": "EntityCandidate",
+        "type": "object"
+      },
+      "EntityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntityCandidate"
+          },
+          "graph_status": {
+            "enum": [
+              "catalog",
+              "building",
+              "live"
+            ],
+            "title": "Graph Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "graph_status"
+        ],
+        "title": "EntityResponse",
+        "type": "object"
+      },
+      "EntitySearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ambiguous": {
+            "title": "Ambiguous",
+            "type": "boolean"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EntityCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "candidates",
+          "ambiguous"
+        ],
+        "title": "EntitySearchResponse",
+        "type": "object"
+      },
+      "ErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "EventArticle": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^art_[A-Za-z0-9_-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "publisher",
+          "title",
+          "url",
+          "published_at"
+        ],
+        "title": "EventArticle",
+        "type": "object"
+      },
+      "EventDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "articles": {
+            "items": {
+              "$ref": "#/components/schemas/EventArticle"
+            },
+            "title": "Articles",
+            "type": "array"
+          },
+          "event": {
+            "$ref": "#/components/schemas/FeedCard"
+          },
+          "merged_from": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Merged From",
+            "type": "array"
+          },
+          "requested_event_id": {
+            "pattern": "^evt_[A-Za-z0-9_-]+$",
+            "title": "Requested Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested_event_id",
+          "event",
+          "articles"
+        ],
+        "title": "EventDetailResponse",
+        "type": "object"
+      },
+      "FeedCard": {
+        "additionalProperties": false,
+        "properties": {
+          "article_count": {
+            "minimum": 1.0,
+            "title": "Article Count",
+            "type": "integer"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/EntityCandidate"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "event_id": {
+            "pattern": "^evt_[A-Za-z0-9_-]+$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "hops": {
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Hops",
+            "type": "integer"
+          },
+          "importance": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "type": "number"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "primary_source": {
+            "title": "Primary Source",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "slot_position": {
+            "minimum": 1.0,
+            "title": "Slot Position",
+            "type": "integer"
+          },
+          "slot_type": {
+            "enum": [
+              "graph",
+              "keyword_probe"
+            ],
+            "title": "Slot Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "revision",
+          "category",
+          "title",
+          "why",
+          "score",
+          "confidence",
+          "hops",
+          "importance",
+          "published_at",
+          "article_count",
+          "primary_source",
+          "entities",
+          "path",
+          "slot_type",
+          "slot_position"
+        ],
+        "title": "FeedCard",
+        "type": "object"
+      },
+      "FeedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FeedResponse",
+        "type": "object"
+      },
+      "FeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "impression",
+              "click",
+              "dismiss",
+              "not_relevant",
+              "save"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^evt_[A-Za-z0-9_-]+$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "slot_position": {
+            "minimum": 1.0,
+            "title": "Slot Position",
+            "type": "integer"
+          },
+          "slot_type": {
+            "enum": [
+              "graph",
+              "keyword_probe"
+            ],
+            "title": "Slot Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "action",
+          "slot_type",
+          "slot_position",
+          "occurred_at",
+          "idempotency_key"
+        ],
+        "title": "FeedbackRequest",
+        "type": "object"
+      },
+      "FeedbackResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "deduplicated": {
+            "title": "Deduplicated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted",
+          "deduplicated"
+        ],
+        "title": "FeedbackResponse",
+        "type": "object"
+      },
+      "GraphEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "target_id",
+          "relation",
+          "confidence"
+        ],
+        "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphNode": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^ent_[A-Za-z0-9_-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "entity_type"
+        ],
+        "title": "GraphNode",
+        "type": "object"
+      },
+      "GraphResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "GraphResponse",
+        "type": "object"
+      },
+      "LoadingResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "retry_after_seconds": {
+            "minimum": 0.0,
+            "title": "Retry After Seconds",
+            "type": "integer"
+          },
+          "state": {
+            "const": "loading",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "retry_after_seconds"
+        ],
+        "title": "LoadingResponse",
+        "type": "object"
+      },
+      "Profile": {
+        "additionalProperties": false,
+        "properties": {
+          "notification_percentile": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Notification Percentile",
+            "type": "integer"
+          },
+          "quiet_end": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "Quiet End",
+            "type": "string"
+          },
+          "quiet_start": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "title": "Quiet Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "notification_percentile",
+          "quiet_start",
+          "quiet_end"
+        ],
+        "title": "Profile",
+        "type": "object"
+      },
+      "ProfilePatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "notification_percentile": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Percentile"
+          },
+          "quiet_end": {
+            "anyOf": [
+              {
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet End"
+          },
+          "quiet_start": {
+            "anyOf": [
+              {
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Start"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "ProfilePatchRequest",
+        "type": "object"
+      },
+      "ProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "ProfileResponse",
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh_token": {
+            "minLength": 1,
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest",
+        "type": "object"
+      },
+      "Seed": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntityCandidate"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "broker"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "weight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "entity",
+          "weight",
+          "source"
+        ],
+        "title": "Seed",
+        "type": "object"
+      },
+      "SeedCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_id": {
+            "pattern": "^ent_[A-Za-z0-9_-]+$",
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "broker"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "weight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "entity_id",
+          "weight"
+        ],
+        "title": "SeedCreateRequest",
+        "type": "object"
+      },
+      "SeedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "seed": {
+            "$ref": "#/components/schemas/Seed"
+          }
+        },
+        "required": [
+          "seed",
+          "created"
+        ],
+        "title": "SeedResponse",
+        "type": "object"
+      },
+      "SeedsStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "enum": [
+              "not_started",
+              "building",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "updated_at"
+        ],
+        "title": "SeedsStatusResponse",
+        "type": "object"
+      },
+      "User": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^usr_[A-Za-z0-9_-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "timezone"
+        ],
+        "title": "User",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Fixture-backed API surface for T03. Real authentication, persistence, and graph work are intentionally deferred to their assigned tasks.",
+    "title": "Te Varta API",
+    "version": "1.0.0-draft"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/v1/account": {
+      "delete": {
+        "operationId": "delete_account_v1_account_delete",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "SC3 proposal: schedule deletion of user-owned data",
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/auth/apple": {
+      "post": {
+        "operationId": "authenticate_with_apple_v1_auth_apple_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleAuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "summary": "Authenticate With Apple",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh_session_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "summary": "SC3 proposal: exchange a refresh token for a short-lived session",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/v1/auth/sign-out": {
+      "post": {
+        "operationId": "sign_out_v1_auth_sign_out_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "SC3 proposal: revoke the current session",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/v1/devices": {
+      "post": {
+        "operationId": "register_device_v1_devices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register Device",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/v1/entities/search": {
+      "get": {
+        "operationId": "search_entities_v1_entities_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitySearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search Entities",
+        "tags": [
+          "entities"
+        ]
+      }
+    },
+    "/v1/entities/{entity_id}": {
+      "get": {
+        "operationId": "get_entity_v1_entities__entity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Entity",
+        "tags": [
+          "entities"
+        ]
+      }
+    },
+    "/v1/events/{event_id}": {
+      "get": {
+        "operationId": "get_event_v1_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Event",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/v1/feed": {
+      "get": {
+        "operationId": "get_feed_v1_feed_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scenario",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scenario"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadingResponse"
+                }
+              }
+            },
+            "description": "Fixture-only loading state."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Feed",
+        "tags": [
+          "feed"
+        ]
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "operationId": "record_feedback_v1_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Feedback",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/v1/graph": {
+      "get": {
+        "operationId": "get_graph_v1_graph_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Graph",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/v1/profile": {
+      "get": {
+        "operationId": "get_profile_v1_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Profile",
+        "tags": [
+          "profile"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_profile_v1_profile_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Profile",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/v1/seeds": {
+      "post": {
+        "operationId": "create_seed_v1_seeds_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeedCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Seed",
+        "tags": [
+          "seeds"
+        ]
+      }
+    },
+    "/v1/seeds/status": {
+      "get": {
+        "operationId": "seeds_status_v1_seeds_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedsStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Seeds Status",
+        "tags": [
+          "seeds"
+        ]
+      }
+    },
+    "/v1/seeds/{entity_id}": {
+      "delete": {
+        "operationId": "delete_seed_v1_seeds__entity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing, invalid, or expired access token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested resource was not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Seed",
+        "tags": [
+          "seeds"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000011 /* TeVartaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* TeVartaApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000001 /* TeVarta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeVarta.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000010 /* TeVartaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeVartaApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000005 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000002 = {isa = PBXGroup; children = (A10000000000000000000003 /* TeVarta */, A10000000000000000000004 /* Products */); sourceTree = "<group>"; };
+		A10000000000000000000003 /* TeVarta */ = {isa = PBXGroup; children = (A10000000000000000000010 /* TeVartaApp.swift */); path = TeVarta; sourceTree = "<group>"; };
+		A10000000000000000000004 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000001 /* TeVarta.app */); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000006 /* TeVarta */ = {isa = PBXNativeTarget; buildConfigurationList = A10000000000000000000007 /* Build configuration list for PBXNativeTarget \"TeVarta\" */; buildPhases = (A10000000000000000000008 /* Sources */, A10000000000000000000005 /* Frameworks */, A10000000000000000000009 /* Resources */); buildRules = (); dependencies = (); name = TeVarta; productName = TeVarta; productReference = A10000000000000000000001 /* TeVarta.app */; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000000 /* Project object */ = {isa = PBXProject; attributes = {LastUpgradeCheck = 1620; TargetAttributes = {A10000000000000000000006 = {CreatedOnToolsVersion = 16.2;};};}; buildConfigurationList = A1000000000000000000000A /* Build configuration list for PBXProject \"TeVarta\" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A10000000000000000000002; productRefGroup = A10000000000000000000004 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A10000000000000000000006 /* TeVarta */); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000009 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000008 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000011 /* TeVartaApp.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1000000000000000000000B /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGN_STYLE = Automatic; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; }; name = Debug; };
+		A1000000000000000000000C /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGN_STYLE = Automatic; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; }; name = Release; };
+		A1000000000000000000000D /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "Apple Development"; CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tevarta.beta; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphonesimulator iphoneos"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+		A1000000000000000000000E /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "Apple Development"; CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.tevarta.beta; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphonesimulator iphoneos"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000000000000000000000A /* Build configuration list for PBXProject \"TeVarta\" */ = {isa = XCConfigurationList; buildConfigurations = (A1000000000000000000000B /* Debug */, A1000000000000000000000C /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A10000000000000000000007 /* Build configuration list for PBXNativeTarget \"TeVarta\" */ = {isa = XCConfigurationList; buildConfigurations = (A1000000000000000000000D /* Debug */, A1000000000000000000000E /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000000 /* Project object */;
+}

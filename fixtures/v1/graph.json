@@ -1,0 +1,7 @@
+{
+  "nodes": [
+    {"id": "ent_tsla", "name": "Tesla Inc", "entity_type": "company"},
+    {"id": "ent_fremont", "name": "Fremont Factory", "entity_type": "place"}
+  ],
+  "edges": [{"source_id": "ent_fremont", "target_id": "ent_tsla", "relation": "OPERATED_BY", "confidence": 0.94}]
+}

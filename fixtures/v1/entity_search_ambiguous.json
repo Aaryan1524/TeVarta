@@ -1,0 +1,8 @@
+{
+  "query": "Apple",
+  "ambiguous": true,
+  "candidates": [
+    {"id": "ent_apple", "name": "Apple Inc", "entity_type": "company", "ticker": "AAPL", "lifecycle": "live"},
+    {"id": "ent_apple_hospital", "name": "Apple Hospital", "entity_type": "company", "ticker": null, "lifecycle": "catalog"}
+  ]
+}

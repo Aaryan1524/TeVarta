@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# iOS / Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Build products
+build/
+.build/

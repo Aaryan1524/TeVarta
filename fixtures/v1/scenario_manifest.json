@@ -1,0 +1,29 @@
+{
+  "contract_version": "v1-draft",
+  "scenarios": {
+    "success": ["auth_success.json", "feed_success.json", "event_success.json"],
+    "empty": ["feed_empty.json"],
+    "loading": ["loading.json"],
+    "ambiguity": ["entity_search_ambiguous.json"],
+    "expired_auth": ["errors/expired_auth.json"],
+    "merged_event": ["event_merged.json"]
+  },
+  "routes": {
+    "POST /v1/auth/apple": "auth_success.json",
+    "POST /v1/auth/refresh": "auth_success.json",
+    "POST /v1/auth/sign-out": "no_content.json",
+    "DELETE /v1/account": "account_deletion.json",
+    "GET /v1/entities/search": "entity_search_success.json",
+    "POST /v1/seeds": "seed_success.json",
+    "GET /v1/seeds/status": "seeds_status.json",
+    "GET /v1/feed": "feed_success.json",
+    "GET /v1/events/{event_id}": "event_success.json",
+    "GET /v1/graph": "graph.json",
+    "GET /v1/entities/{entity_id}": "entity_success.json",
+    "DELETE /v1/seeds/{entity_id}": "no_content.json",
+    "GET /v1/profile": "profile.json",
+    "PATCH /v1/profile": "profile.json",
+    "POST /v1/devices": "device_success.json",
+    "POST /v1/feedback": "feedback_success.json"
+  }
+}
