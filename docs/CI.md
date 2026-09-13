@@ -6,7 +6,9 @@ The repository supplies three required CI workflows:
   generated-OpenAPI drift check.
 - **iOS:** shared-fixture Swift decoding and a simulator app build.
 - **Dependency review:** dependency changes are reviewed on pull requests;
-  Dependabot keeps Python and Actions dependencies current.
+  Dependabot keeps Python and Actions dependencies current. On private repositories
+  without GitHub Advanced Security, the Dependency Review action is configured to
+  continue on error while Dependabot handles scheduled vulnerability scanning.
 
 After the first push, configure `Backend contract / test`, `Backend contract /
 required-check-guard`, and `iOS / build` as required status checks for the

@@ -16,7 +16,7 @@ private struct ContentView: View {
         VStack(spacing: 16) {
             Image(systemName: "newspaper")
                 .font(.system(size: 44))
-                .foregroundStyle(.accent)
+                .foregroundStyle(Color.accentColor)
             Text("Te Varta")
                 .font(.largeTitle.bold())
             Text("Fixture-first app foundation")
