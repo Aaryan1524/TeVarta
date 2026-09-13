@@ -1,0 +1,230 @@
+# T01 selected-source registry. This file does not authorize production polling:
+# T19 may set `active: true` only after endpoint, robots/feed-terms, and
+# body-processing/storage checks pass for that individual source.
+sources:
+  - id: sec_current_filings
+    domain: sec.gov
+    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&output=atom"
+    publisher_group: us_sec
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: atom
+    access_note: "Use the SEC-required descriptive User-Agent and stay within SEC rate limits."
+    evidence_url: "https://www.sec.gov/search-filings"
+
+  - id: federal_register_documents
+    domain: federalregister.gov
+    feed_url: "https://www.federalregister.gov/api/v1/documents.json?per_page=100&order=newest"
+    publisher_group: us_federal_register
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: json_api
+    evidence_url: "https://www.federalregister.gov/developers/documentation/api/v1"
+
+  - id: federal_reserve_press
+    domain: federalreserve.gov
+    feed_url: "https://www.federalreserve.gov/feeds/press_all.xml"
+    publisher_group: us_federal_reserve
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.federalreserve.gov/feeds/feeds.htm"
+
+  - id: treasury_press
+    domain: home.treasury.gov
+    feed_url: "https://home.treasury.gov/rss/press-releases.xml"
+    publisher_group: us_treasury
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    access_note: "Validate the current RSS endpoint in T19 before enabling the worker."
+    evidence_url: "https://home.treasury.gov/news/press-releases"
+
+  - id: cftc_press_releases
+    domain: cftc.gov
+    feed_url: "https://www.cftc.gov/RSS/CFTCPressReleases.xml"
+    publisher_group: us_cftc
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.cftc.gov/RSS/index.htm"
+
+  - id: doj_press_releases
+    domain: justice.gov
+    feed_url: "https://www.justice.gov/api/v1/press_releases.json?sort=created&direction=DESC&pagesize=50"
+    publisher_group: us_doj
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: json_api
+    evidence_url: "https://www.justice.gov/developer/api-documentation/api_v1"
+
+  - id: eia_today_in_energy
+    domain: eia.gov
+    feed_url: "https://www.eia.gov/rss/todayinenergy.xml"
+    publisher_group: us_eia
+    tier_value: 1.0
+    reliability: 0.98
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.eia.gov/tools/rssfeeds/"
+
+  - id: usgs_earthquakes
+    domain: earthquake.usgs.gov
+    feed_url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.atom"
+    publisher_group: us_usgs
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: atom
+    evidence_url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/"
+
+  - id: noaa_active_alerts
+    domain: api.weather.gov
+    feed_url: "https://api.weather.gov/alerts/active?status=actual&message_type=alert"
+    publisher_group: us_noaa
+    tier_value: 1.0
+    reliability: 0.98
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: json_api
+    evidence_url: "https://www.weather.gov/documentation/services-web-api"
+
+  - id: ecb_market_information
+    domain: mid.ecb.europa.eu
+    feed_url: "https://mid.ecb.europa.eu/rss/mid.xml"
+    publisher_group: european_central_bank
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.ecb.europa.eu/press/shared/pdf/MID-Catalogue-and-Integration-Guide.en.pdf"
+
+  - id: bank_of_england_news
+    domain: bankofengland.co.uk
+    feed_url: "https://www.bankofengland.co.uk/rss/news"
+    publisher_group: bank_of_england
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.bankofengland.co.uk/news"
+
+  - id: apple_newsroom
+    domain: apple.com
+    feed_url: "https://www.apple.com/newsroom/rss-feed.rss"
+    publisher_group: apple_ir
+    tier_value: 0.9
+    reliability: 0.95
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://www.apple.com/newsroom/"
+
+  - id: microsoft_news
+    domain: news.microsoft.com
+    feed_url: "https://news.microsoft.com/feed/"
+    publisher_group: microsoft_ir
+    tier_value: 0.9
+    reliability: 0.95
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://news.microsoft.com/"
+
+  - id: nvidia_news
+    domain: nvidianews.nvidia.com
+    feed_url: "https://nvidianews.nvidia.com/rss.xml"
+    publisher_group: nvidia_ir
+    tier_value: 0.9
+    reliability: 0.95
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://nvidianews.nvidia.com/"
+
+  - id: meta_news
+    domain: about.fb.com
+    feed_url: "https://about.fb.com/news/feed/"
+    publisher_group: meta_ir
+    tier_value: 0.9
+    reliability: 0.95
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: rss
+    evidence_url: "https://about.fb.com/news/"
+
+  - id: reuters_business
+    domain: reuters.com
+    feed_url: null
+    publisher_group: reuters
+    tier_value: 0.7
+    reliability: 0.90
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: licensed_api
+    access_note: "Enable only after a commercial feed and content-rights review."
+    evidence_url: "https://www.reuters.com/"
+
+  - id: associated_press_business
+    domain: apnews.com
+    feed_url: null
+    publisher_group: associated_press
+    tier_value: 0.7
+    reliability: 0.90
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: licensed_api
+    access_note: "Enable only after a commercial feed and content-rights review."
+    evidence_url: "https://apnews.com/hub/business"
+
+  - id: bloomberg_markets
+    domain: bloomberg.com
+    feed_url: null
+    publisher_group: bloomberg
+    tier_value: 0.7
+    reliability: 0.90
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: licensed_api
+    access_note: "Enable only after a commercial feed and content-rights review."
+    evidence_url: "https://www.bloomberg.com/markets"
+
+  - id: financial_times_markets
+    domain: ft.com
+    feed_url: null
+    publisher_group: financial_times
+    tier_value: 0.5
+    reliability: 0.80
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: licensed_api
+    access_note: "Enable only after a commercial feed and content-rights review."
+    evidence_url: "https://www.ft.com/markets"
+
+  - id: cnbc_markets
+    domain: cnbc.com
+    feed_url: null
+    publisher_group: cnbc
+    tier_value: 0.5
+    reliability: 0.80
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: licensed_api
+    access_note: "Enable only after a commercial feed and content-rights review."
+    evidence_url: "https://www.cnbc.com/markets/"
