@@ -1,0 +1,18 @@
+user_id: "usr_synthetic_001"
+event_id: "evt_example_supply_001"
+score: 74.4
+components:
+  path_score: 0.61
+  importance: 0.8
+  freshness: 1.0
+  portfolio_exposure: 0.0
+  source_reliability: 0.0
+  novelty: 0.0
+  explicit_interest: 0.0
+path_json:
+  entity_ids: ["ent_example_supplier", "ent_example_manufacturer"]
+  relation_types: ["SUPPLIES"]
+  hop_count: 1
+slot_type: "graph"
+slot_position: 1
+channel: "feed"

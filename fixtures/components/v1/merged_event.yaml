@@ -1,0 +1,9 @@
+surviving_event_id: "evt_example_supply_001"
+merged_event_id: "evt_example_supply_002"
+merge_reason: "same_event_evidence"
+revision: 2
+effect:
+  merged_event_status: "merged"
+  merged_into: "evt_example_supply_001"
+  surviving_event_recompiled: true
+  feed_rows_recomputed: true

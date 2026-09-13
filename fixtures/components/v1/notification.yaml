@@ -1,0 +1,6 @@
+device_id: "dev_synthetic_001"
+event_id: "evt_example_supply_001"
+channel: "push"
+title: "Potential supply-chain impact"
+body: "Affects your example holding through a documented supplier relationship."
+collapse_id: "evt_example_supply_001"

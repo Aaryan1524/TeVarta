@@ -1,0 +1,14 @@
+request_id: "1f30b226-3d5a-4b53-b46c-02c7e6cb7f8b"
+candidates:
+  - url: "https://example.invalid/disclosure"
+    title: "Example issuer reports an operational update"
+    snippet: "A synthetic metadata-only result for contract tests."
+    publisher: "example_ir"
+    published_at: "2026-09-12T12:00:00Z"
+    source_hint: "example_ir_feed"
+usage:
+  request_id: "1f30b226-3d5a-4b53-b46c-02c7e6cb7f8b"
+  component: "SearchProvider"
+  occurred_at: "2026-09-12T12:00:01Z"
+  outcome: "success"
+  query_count: 1

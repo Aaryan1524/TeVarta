@@ -1,0 +1,10 @@
+surface_form: "Apple"
+resolution: candidates
+candidates:
+  - entity_id: "ent_apple_inc"
+    canonical_name: "Apple Inc."
+    type: "Company"
+  - entity_id: "ent_apple_topic"
+    canonical_name: "Apple"
+    type: "Topic"
+resolution_miss_written: false
