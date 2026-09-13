@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "environments": {
+    "production": {
+      "postgres": {
+        "frequency": "daily",
+        "retention_days": 35,
+        "restore_test_required_before_beta": true
+      },
+      "neo4j": {
+        "frequency": "daily",
+        "retention_days": 35,
+        "restore_test_required_before_beta": true
+      }
+    },
+    "development": {
+      "postgres": {
+        "frequency": "daily",
+        "retention_days": 7
+      },
+      "neo4j": {
+        "frequency": "daily",
+        "retention_days": 7
+      }
+    }
+  }
+}

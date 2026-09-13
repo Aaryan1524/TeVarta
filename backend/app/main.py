@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.requests import Request
 
 from app.mock_api import FixtureAuthError, fixture, validation_error_handler
 from app.mock_api import router as mock_router
+from app.operations import EnvironmentSettings, HSTSMiddleware, install_log_redaction
 
 app = FastAPI(
     title="Te Varta API",
@@ -15,6 +17,15 @@ app = FastAPI(
     ),
 )
 app.include_router(mock_router)
+
+# Validate the environment boundary at process start, before an API request can
+# reach a data service.  Production additionally refuses clear-text HTTP.
+settings = EnvironmentSettings.from_environ()
+if settings.name == "production":
+    app.add_middleware(HTTPSRedirectMiddleware)
+    app.add_middleware(HSTSMiddleware)
+
+install_log_redaction()
 
 
 @app.exception_handler(RequestValidationError)
