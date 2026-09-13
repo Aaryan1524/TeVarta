@@ -1,0 +1,22 @@
+event_id: "evt_example_supply_001"
+revision: 1
+canonical_title: "Example supplier disruption"
+event_type: "supply_disruption"
+summary: "A synthetic supplier disruption is being reviewed for its potential effect on a named company."
+severity_class: "high"
+entities:
+  - surface: "Example Supplier"
+    role: "subject"
+claims:
+  - text: "The facility reported a temporary interruption."
+    article_id: "art_example_001"
+    directness: "stated"
+event_time: "2026-09-12T11:30:00Z"
+proposed_edges:
+  - status: "queued_for_human_review"
+usage:
+  request_id: "ec2b7c2d-95ff-4f0d-b4c7-a976bf116f8b"
+  component: "EventCompiler"
+  occurred_at: "2026-09-12T12:05:00Z"
+  outcome: "success"
+  model: "placeholder_for_configured_model"

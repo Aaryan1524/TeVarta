@@ -1,0 +1,19 @@
+operation_name: "create_temporal_edge_revision"
+request_id: "352dc599-701a-4220-a913-43b0f1f9eb2a"
+parameters:
+  from_entity_id: "ent_example_supplier"
+  to_entity_id: "ent_example_manufacturer"
+  relation_type: "SUPPLIES"
+  weight: 0.85
+  confidence: 0.83
+  valid_from: "2026-01-01T00:00:00Z"
+  valid_until: null
+  observed_at: "2026-09-12T12:10:00Z"
+  invalidated_at: null
+  source_ids: ["curated:example-sha"]
+  evidence_count: 1
+  directness: 1.0
+  origin: "curated"
+revision_effect:
+  closes_prior_valid_interval: true
+  creates_new_relationship: true

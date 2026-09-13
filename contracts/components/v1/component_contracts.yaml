@@ -1,0 +1,163 @@
+schema_version: v1-draft
+status: pending_founder_approval
+approval_required_by: 2026-09-16
+scope: worker_and_graph_boundaries
+
+common:
+  ids:
+    entity_id: non_empty_string
+    article_id: non_empty_string
+    event_id: non_empty_string
+    revision: positive_integer
+    request_id: uuid
+  timestamps: rfc3339_utc
+  forbidden:
+    - raw_cypher
+    - llm_generated_query
+    - access_token
+    - apple_sub
+    - source_body_text
+  allowed_relation_types:
+    - DEPENDS_ON
+    - SUPPLIES
+    - SOLE_SOURCE_FOR
+    - MANUFACTURES_AT
+    - EXPOSED_TO
+    - CUSTOMER_OF
+    - COMPETES_WITH
+    - PRODUCES
+    - SUBSIDIARY_OF
+    - OPERATED_BY
+    - OPERATES_IN
+    - REGULATED_BY
+    - LISTED_AS
+    - IN_INDUSTRY
+
+contracts:
+  SearchProvider:
+    purpose: Bounded metadata discovery; provider implementations are deferred except the one T19 adapter.
+    request:
+      required: [request_id, query, published_after, max_results]
+      fields:
+        request_id: uuid
+        query: non_empty_string
+        published_after: rfc3339_utc
+        max_results: integer_1_to_50
+        entity_ids: optional_array_of_entity_id
+    response:
+      required: [request_id, candidates, usage]
+      candidate_fields: [url, title, snippet, publisher, published_at, source_hint]
+      usage: UsageRecord
+    invariants:
+      - Returns metadata only; body retrieval is a separate tiered operation.
+      - Counts against the single shared search-query budget.
+
+  EventCompiler:
+    purpose: One structured LLM compilation per event revision.
+    request:
+      required: [request_id, event_id, revision, article_ids, evidence]
+      evidence_fields: [article_id, title, snippet, published_at, source_id, tagged_entities]
+    response:
+      required: [event_id, revision, canonical_title, event_type, summary, severity_class, entities, claims, event_time, proposed_edges, usage]
+      fields:
+        summary: neutral_text_max_60_words
+        severity_class: enum_critical_high_moderate_low_routine
+        entities: array_of_surface_and_role
+        claims: array_of_text_article_id_and_directness
+        proposed_edges: review_queue_only
+        usage: UsageRecord
+    invariants:
+      - Regenerate only for a material change: article count doubles, severity changes, or merge.
+      - Proposed edges are never auto-committed.
+      - Confidence, importance, relevance, and graph traversal are deterministic downstream work.
+
+  NamedGraphOperation:
+    purpose: Parameterized graph writes and prepared reads through one allowlisted module.
+    request:
+      required: [operation_name, parameters, request_id]
+      operation_name:
+        - upsert_entity
+        - create_temporal_edge_revision
+        - invalidate_temporal_edge
+        - read_entity_neighborhood
+        - read_historical_path
+      parameters: named_json_object
+    temporal_edge_required:
+      - from_entity_id
+      - to_entity_id
+      - relation_type
+      - weight
+      - confidence
+      - valid_from
+      - observed_at
+      - source_ids
+      - evidence_count
+      - directness
+      - origin
+    invariants:
+      - relation_type is one of the frozen 14 relation types.
+      - source_ids is non-empty and every revision closes, rather than overwrites, prior truth.
+      - No graph node or relationship contains user_id.
+
+  Scoring:
+    purpose: Deterministic confidence, importance, path score, and relevance inputs/outputs.
+    request:
+      required: [evidence, path, importance_inputs, freshness_hours]
+      evidence_fields: [source_quality_max, publisher_groups, directness, resolution_quality]
+      path_fields: [seed_weight, edge_weights, hop_count]
+      importance_inputs: [severity, primary_source_strength, independent_evidence]
+    response:
+      required: [confidence, importance, path_score, relevance_components]
+      relevance_components: [path_score, importance, freshness, portfolio_exposure, source_reliability, novelty, explicit_interest]
+    invariants:
+      - The first three relevance components use the frozen weights; the final four are stored at weight zero.
+      - No LLM output supplies confidence, importance, path score, or relevance.
+
+  GraphExpansionStatus:
+    purpose: Communicate demand-driven entity expansion without making clients poll internal workers.
+    response:
+      required: [entity_id, status, live_state, current_hop, max_hop, updated_at]
+      status: enum_pending_running_complete_failed
+      live_state: enum_catalog_live
+    invariants:
+      - Expansion stops at three hops or path score below 0.05.
+      - A second seed for a live entity reuses the global graph rather than starting another expansion.
+
+  PreparedGraphRead:
+    purpose: Return a presentation-safe graph projection produced by a named read operation.
+    response:
+      required: [subject_entity_id, nodes, edges, generated_at]
+      node_fields: [entity_id, canonical_name, type]
+      edge_fields: [from_entity_id, to_entity_id, relation_type, weight, confidence, valid_from, valid_until, source_ids]
+    invariants:
+      - Returns no source body text, user data, credentials, or arbitrary graph properties.
+
+  FeedWrite:
+    purpose: Persist one explainable event result for one authorized user.
+    request:
+      required: [user_id, event_id, score, components, path_json, slot_type, slot_position, channel]
+      components: all_seven_relevance_components
+      slot_type: enum_graph_keyword_probe
+      channel: enum_feed_push_digest_logged
+    response:
+      required: [user_id, event_id, created_at]
+    invariants:
+      - The `(user_id, event_id)` pair is idempotent.
+      - path_json represents the winning bounded path used to explain the result.
+
+  NotificationPayload:
+    purpose: Deliver a minimal APNs-visible notification after eligibility and rate-limit checks.
+    request:
+      required: [device_id, event_id, channel, title, body, collapse_id]
+      channel: enum_push_digest
+    invariants:
+      - Contains no APNs token, access token, apple_sub, financial advice, or source body text.
+      - Delivery eligibility, quiet hours, daily cap, and cooldown are evaluated before construction.
+
+  UsageRecord:
+    purpose: Meter a bounded provider or model invocation without recording sensitive payloads.
+    fields:
+      required: [request_id, component, occurred_at, outcome]
+      optional: [provider, model, input_tokens, output_tokens, query_count, latency_ms, cost_usd]
+    invariants:
+      - Never records prompts, source body text, credentials, APNs tokens, access tokens, or apple_sub.
