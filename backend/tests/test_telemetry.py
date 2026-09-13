@@ -41,6 +41,38 @@ def test_card_context_and_session_duration_are_required() -> None:
         event(action="session_length", event_id=None, slot_type=None, slot_position=None)
 
 
+@pytest.mark.parametrize(
+    "action",
+    [
+        "app_open",
+        "feed_view",
+        "card_impression",
+        "card_click",
+        "card_dismiss",
+        "not_relevant",
+        "save",
+        "push_received",
+        "push_opened",
+        "digest_opened",
+        "seed_added",
+        "seed_removed",
+        "session_length",
+    ],
+)
+def test_every_required_telemetry_action_validates(action: str) -> None:
+    payload: dict[str, object] = {
+        "action": action,
+        "occurred_at": "2026-09-13T00:00:00Z",
+        "idempotency_key": f"telemetry-{action}",
+    }
+    if action in {"card_impression", "card_click", "card_dismiss", "not_relevant", "save"}:
+        payload |= {"event_id": "evt_test", "slot_type": "graph", "slot_position": 1}
+    if action == "session_length":
+        payload["session_duration_s"] = 5
+
+    assert FeedbackRequest.model_validate(payload).action == action
+
+
 def test_legacy_action_aliases_are_normalized_and_duration_is_finite() -> None:
     assert event(action="impression").action == "card_impression"
     with pytest.raises(ValueError):
