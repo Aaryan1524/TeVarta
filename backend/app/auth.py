@@ -10,10 +10,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
-from jwt import InvalidTokenError, PyJWKClient
+import psycopg
+from jwt import InvalidTokenError, PyJWKClient, PyJWKClientError
 
 APPLE_ISSUER = "https://appleid.apple.com"
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
@@ -57,11 +58,109 @@ class SessionStore(Protocol):
         self, user_id: UUID, refresh_token_hash: bytes, expires_at: datetime
     ) -> StoredSession: ...
 
-    def find_session(self, refresh_token_hash: bytes) -> StoredSession | None: ...
+    def replace_session(
+        self, refresh_token_hash: bytes, replacement_hash: bytes, expires_at: datetime
+    ) -> StoredSession | None: ...
 
     def find_active_session(self, session_id: UUID) -> StoredSession | None: ...
 
     def revoke_session(self, session_id: UUID) -> None: ...
+
+
+class PostgresSessionStore:
+    """Small, parameterized persistence boundary for revocable sessions."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = database_url
+
+    def _connect(self) -> psycopg.Connection:
+        return psycopg.connect(self.database_url)
+
+    @staticmethod
+    def _user(row: tuple[UUID, str, str]) -> SessionUser:
+        return SessionUser(internal_id=row[0], public_id=row[1], timezone=row[2])
+
+    def get_or_create_user(self, apple_sub: str) -> SessionUser:
+        # A public-ID collision is extraordinarily unlikely, but retrying keeps the
+        # API-facing identifier independent from database conflict handling.
+        for _ in range(3):
+            try:
+                with self._connect() as connection:
+                    row = connection.execute(
+                        """INSERT INTO users (public_id, apple_sub)
+                        VALUES (%s, %s)
+                        ON CONFLICT (apple_sub) DO UPDATE SET apple_sub = EXCLUDED.apple_sub
+                        RETURNING id, public_id, tz""",
+                        (f"usr_{uuid4().hex}", apple_sub),
+                    ).fetchone()
+                    assert row is not None
+                    return self._user(row)
+            except psycopg.errors.UniqueViolation:
+                continue
+        raise AuthenticationError("could not create authenticated user")
+
+    def create_session(
+        self, user_id: UUID, refresh_token_hash: bytes, expires_at: datetime
+    ) -> StoredSession:
+        with self._connect() as connection:
+            row = connection.execute(
+                """INSERT INTO auth_sessions (user_id, refresh_token_hash, expires_at)
+                VALUES (%s, %s, %s) RETURNING id, expires_at, revoked_at""",
+                (user_id, refresh_token_hash, expires_at),
+            ).fetchone()
+            assert row is not None
+            user_row = connection.execute(
+                "SELECT id, public_id, tz FROM users WHERE id = %s", (user_id,)
+            ).fetchone()
+            assert user_row is not None
+            return StoredSession(row[0], self._user(user_row), row[1], row[2])
+
+    def replace_session(
+        self, refresh_token_hash: bytes, replacement_hash: bytes, expires_at: datetime
+    ) -> StoredSession | None:
+        # One statement consumes the old credential and creates exactly one replacement.
+        with self._connect() as connection:
+            row = connection.execute(
+                """WITH consumed AS (
+                    UPDATE auth_sessions
+                    SET revoked_at = now()
+                    WHERE refresh_token_hash = %s
+                      AND revoked_at IS NULL
+                      AND expires_at > now()
+                    RETURNING user_id
+                ), replacement AS (
+                    INSERT INTO auth_sessions (user_id, refresh_token_hash, expires_at)
+                    SELECT user_id, %s, %s FROM consumed
+                    RETURNING id, user_id, expires_at, revoked_at
+                )
+                SELECT replacement.id, users.id, users.public_id, users.tz,
+                       replacement.expires_at, replacement.revoked_at
+                FROM replacement JOIN users ON users.id = replacement.user_id""",
+                (refresh_token_hash, replacement_hash, expires_at),
+            ).fetchone()
+            if row is None:
+                return None
+            return StoredSession(row[0], self._user((row[1], row[2], row[3])), row[4], row[5])
+
+    def find_active_session(self, session_id: UUID) -> StoredSession | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT sessions.id, users.id, users.public_id, users.tz,
+                          sessions.expires_at, sessions.revoked_at
+                   FROM auth_sessions AS sessions JOIN users ON users.id = sessions.user_id
+                   WHERE sessions.id = %s AND sessions.revoked_at IS NULL""",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return StoredSession(row[0], self._user((row[1], row[2], row[3])), row[4], row[5])
+
+    def revoke_session(self, session_id: UUID) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE id = %s",
+                (session_id,),
+            )
 
 
 class AppleJWTVerifier:
@@ -82,7 +181,7 @@ class AppleJWTVerifier:
                 issuer=APPLE_ISSUER,
                 options={"require": ["sub", "exp", "iss", "aud"]},
             )
-        except InvalidTokenError as exc:
+        except (InvalidTokenError, PyJWKClientError) as exc:
             raise AuthenticationError("invalid Apple identity token") from exc
         apple_sub = claims.get("sub")
         if not isinstance(apple_sub, str) or not apple_sub:
@@ -138,18 +237,16 @@ class SessionService:
         return self._access_token(session, user), refresh_token, self._access_expiry(), user
 
     def refresh(self, refresh_token: str) -> tuple[str, str, datetime, SessionUser]:
-        session = self.store.find_session(self._digest_refresh_token(refresh_token))
-        if session is None or session.revoked_at is not None or session.expires_at <= self.now():
-            raise AuthenticationError("invalid or expired refresh token")
-        self.store.revoke_session(session.id)
         replacement = secrets.token_urlsafe(48)
-        renewed = self.store.create_session(
-            session.user.internal_id,
+        session = self.store.replace_session(
+            self._digest_refresh_token(refresh_token),
             self._digest_refresh_token(replacement),
             self.now() + self.refresh_ttl,
         )
+        if session is None:
+            raise AuthenticationError("invalid or expired refresh token")
         return (
-            self._access_token(renewed, session.user),
+            self._access_token(session, session.user),
             replacement,
             self._access_expiry(),
             session.user,

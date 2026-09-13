@@ -50,6 +50,27 @@ def test_log_filter_redacts_tokens_and_apple_sub() -> None:
     assert record.apns_token == REDACTED
 
 
+def test_log_filter_redacts_quoted_credentials_and_formatted_arguments() -> None:
+    record = logging.LogRecord(
+        "test",
+        20,
+        __file__,
+        1,
+        "%s",
+        ({"refresh_token": "synthetic-refresh", "identity_token": "synthetic-identity"},),
+        None,
+    )
+    signing_key = logging.LogRecord(
+        "test", 20, __file__, 1, "TEVARTA_JWT_SIGNING_KEY=synthetic-key", (), None
+    )
+
+    SensitiveDataRedactionFilter().filter(record)
+    SensitiveDataRedactionFilter().filter(signing_key)
+
+    assert "synthetic" not in record.getMessage()
+    assert "synthetic" not in signing_key.getMessage()
+
+
 def test_installed_log_redaction_removes_values_from_emitted_output() -> None:
     stream = StringIO()
     handler = logging.StreamHandler(stream)

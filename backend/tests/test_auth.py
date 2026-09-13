@@ -13,7 +13,10 @@ from app.auth import (
     SessionUser,
     StoredSession,
 )
+from app.main import app
+from app.operations import FixedWindowRateLimiter, RateLimitExceeded
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi.testclient import TestClient
 
 SIGNING_KEY = "a" * 32
 NOW = datetime.now(UTC)
@@ -46,9 +49,15 @@ class MemoryStore:
         self.refresh_index[refresh_token_hash] = session.id
         return session
 
-    def find_session(self, refresh_token_hash: bytes) -> StoredSession | None:
+    def replace_session(
+        self, refresh_token_hash: bytes, replacement_hash: bytes, expires_at: datetime
+    ) -> StoredSession | None:
         session_id = self.refresh_index.get(refresh_token_hash)
-        return self.sessions.get(session_id) if session_id else None
+        session = self.sessions.get(session_id) if session_id else None
+        if session is None or session.revoked_at is not None or session.expires_at <= NOW:
+            return None
+        self.revoke_session(session.id)
+        return self.create_session(session.user.internal_id, replacement_hash, expires_at)
 
     def find_active_session(self, session_id: UUID) -> StoredSession | None:
         session = self.sessions.get(session_id)
@@ -174,3 +183,34 @@ def test_apple_verifier_rejects_a_token_signed_by_an_unknown_key() -> None:
 
     with pytest.raises(AuthenticationError):
         apple_verifier.verify(apple_token(attacker_key))
+
+
+def test_real_mode_routes_issue_and_revoke_credentials_through_the_common_dependency() -> None:
+    auth, _ = service()
+    previous_service = app.state.auth_service
+    previous_limiter = app.state.rate_limiter
+    app.state.auth_service = auth
+    app.state.rate_limiter = FixedWindowRateLimiter(limit=10, window_seconds=60)
+    try:
+        client = TestClient(app)
+        signed_in = client.post("/v1/auth/apple", json={"identity_token": "verified-token"})
+        assert signed_in.status_code == 200
+        access_token = signed_in.json()["access_token"]
+        refresh_token = signed_in.json()["refresh_token"]
+        headers = {"Authorization": f"Bearer {access_token}"}
+        assert client.get("/v1/profile", headers=headers).status_code == 501
+        assert client.post("/v1/auth/sign-out", headers=headers).status_code == 204
+        assert client.get("/v1/profile", headers=headers).status_code == 401
+        refreshed = client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
+        assert refreshed.status_code == 401
+    finally:
+        app.state.auth_service = previous_service
+        app.state.rate_limiter = previous_limiter
+
+
+def test_rate_limiter_rejects_the_request_after_its_allowance() -> None:
+    limiter = FixedWindowRateLimiter(limit=2, window_seconds=60)
+    limiter.check("auth:127.0.0.1", now=10)
+    limiter.check("auth:127.0.0.1", now=11)
+    with pytest.raises(RateLimitExceeded):
+        limiter.check("auth:127.0.0.1", now=12)
