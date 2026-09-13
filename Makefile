@@ -11,7 +11,15 @@ backend-test:
 	$(PYTHON) -m pytest
 
 backend-lint:
-	$(PYTHON) -m ruff check backend
+	$(PYTHON) -m ruff check backend migrations
+
+.PHONY: database-test database-upgrade
+database-test:
+	@test -n "$$TEVARTA_TEST_POSTGRES_URL" || (echo "Set TEVARTA_TEST_POSTGRES_URL"; exit 1)
+	$(PYTHON) -m pytest backend/tests/test_database.py
+
+database-upgrade:
+	$(PYTHON) -m alembic upgrade head
 
 backend-smoke:
 	$(PYTHON) -m pytest backend/tests/test_smoke.py

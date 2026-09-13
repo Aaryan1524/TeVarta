@@ -24,3 +24,7 @@ The backend is a fixture-backed FastAPI mock for the draft v1 contract. It is
 not a substitute for the real auth, data, graph, or worker implementations in
 their assigned tasks. See [`contracts/v1/README.md`](contracts/v1/README.md)
 for contract status and the required founder decision on SC3 security routes.
+
+T05 adds the PostgreSQL schema independently of the mock API. See
+[`migrations/README.md`](migrations/README.md) for database setup, SQL previews,
+and `make database-test` against disposable PostgreSQL/pgvector databases.

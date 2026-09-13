@@ -1,0 +1,373 @@
+"""Run against disposable PostgreSQL databases, never an existing application schema."""
+
+import io
+import os
+from pathlib import Path
+from uuid import uuid4
+
+import psycopg
+import pytest
+from alembic import command
+from alembic.config import Config
+from psycopg import sql
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
+
+ROOT = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.database
+USER_A = "00000000-0000-0000-0000-000000000001"
+EVENT = "00000000-0000-0000-0000-000000000004"
+OTHER_EVENT = "00000000-0000-0000-0000-000000000005"
+TABLES = {
+    "users",
+    "devices",
+    "user_seeds",
+    "entities",
+    "entity_aliases",
+    "sources",
+    "articles",
+    "article_entities",
+    "quarantine",
+    "recall_audit",
+    "events",
+    "event_articles",
+    "event_entities",
+    "event_summaries",
+    "why_cache",
+    "user_feed",
+    "score_distribution",
+    "notification_log",
+    "feedback",
+    "resolution_misses",
+    "demand_log",
+    "event_claims",
+    "usage_records",
+}
+
+
+def alembic_config(connection=None):
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "migrations"))
+    if connection is not None:
+        config.attributes["connection"] = connection
+    return config
+
+
+@pytest.fixture(scope="module")
+def database_factory():
+    target = os.environ.get("TEVARTA_TEST_POSTGRES_URL")
+    if not target:
+        pytest.skip("Set TEVARTA_TEST_POSTGRES_URL to run actual PostgreSQL migration tests")
+    url = make_url(target)
+    if url.host not in {"localhost", "127.0.0.1"} or url.database != "tevarta_test":
+        pytest.fail("Database tests require localhost and the dedicated tevarta_test database")
+    admin_dsn = url.set(drivername="postgresql").render_as_string(hide_password=False)
+    owned = []
+
+    def create():
+        name = "tevarta_test_" + uuid4().hex
+        with psycopg.connect(admin_dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        owned.append(name)
+        return url.set(drivername="postgresql+psycopg", database=name)
+
+    yield create
+    # Only databases created by this fixture are removed; no wildcard or reused data.
+    with psycopg.connect(admin_dsn, autocommit=True) as admin:
+        for name in owned:
+            admin.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(name)))
+
+
+@pytest.fixture(scope="module")
+def migrated_url(database_factory):
+    url = database_factory()
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        command.upgrade(alembic_config(connection), "head")
+    engine.dispose()
+    return url
+
+
+@pytest.fixture
+def db(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    with psycopg.connect(dsn) as connection:
+        connection.execute((ROOT / "fixtures/database/foundation.sql").read_text())
+        yield connection
+        connection.rollback()
+
+
+def test_all_tables_and_critical_indexes_exist(db):
+    tables = {
+        row[0] for row in db.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+    }
+    assert tables == TABLES | {"alembic_version"}
+    indexes = dict(
+        db.execute("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'")
+    )
+    assert "(entity_id)" in indexes["ix_user_seeds_entity"]
+    assert "(user_id, score DESC, created_at DESC)" in indexes["ix_user_feed_rank"]
+    assert "UNIQUE" in indexes["uq_entity_alias_identifier"]
+    assert "WHERE is_identifier" in indexes["uq_entity_alias_identifier"]
+
+
+def test_alias_can_have_multiple_candidates_but_identifier_cannot(db):
+    assert (
+        db.execute("SELECT count(*) FROM entity_aliases WHERE alias_norm = 'apple'").fetchone()[0]
+        == 2
+    )
+    db.execute(
+        """INSERT INTO entity_aliases VALUES ('nasdaq:aapl', 'ent_apple', 'fixture', 1, true)"""
+    )
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute(
+            """INSERT INTO entity_aliases VALUES ('nasdaq:aapl', 'ent_fruit', 'fixture', 1, true)"""
+        )
+
+
+@pytest.mark.parametrize("table", ["user_seeds", "user_feed", "feedback", "event_articles"])
+def test_duplicate_keys_rejected(db, table):
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute(
+            sql.SQL("INSERT INTO {} SELECT * FROM {} LIMIT 1").format(
+                sql.Identifier(table), sql.Identifier(table)
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "table,column,public_id",
+    [
+        ("articles", "embedding", "art_test"),
+        ("events", "centroid", "evt_test"),
+    ],
+)
+def test_vector_dimensions_enforced(db, table, column, public_id):
+    vector = "[" + ",".join(["0.1"] * 1024) + "]"
+    scope = sql.SQL(", embedding_scope = 'body'") if table == "articles" else sql.SQL("")
+    query = sql.SQL("UPDATE {} SET {} = %s::vector{} WHERE public_id = %s").format(
+        sql.Identifier(table), sql.Identifier(column), scope
+    )
+    db.execute(query, (vector, public_id))
+    dimensions = db.execute(
+        sql.SQL("SELECT vector_dims({}) FROM {} WHERE public_id = %s").format(
+            sql.Identifier(column), sql.Identifier(table)
+        ),
+        (public_id,),
+    ).fetchone()[0]
+    assert dimensions == 1024
+    with pytest.raises(psycopg.errors.DataException):
+        db.execute(query, ("[1,2,3]", public_id))
+
+
+def test_embedding_scope_cannot_exist_without_embedding(db):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute("UPDATE articles SET embedding_scope = 'body'")
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "path_score",
+        "importance",
+        "freshness",
+        "portfolio_exposure",
+        "source_reliability",
+        "novelty",
+        "explicit_interest",
+    ],
+)
+def test_each_logged_component_required(db, key):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute("UPDATE user_feed SET components = components - %s", (key,))
+
+
+@pytest.mark.parametrize("value", ["null", '"0.5"', "false", "[]", "{}"])
+def test_logged_component_must_be_numeric(db, value):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute(
+            "UPDATE user_feed SET components = jsonb_set(components, '{novelty}', %s::jsonb)",
+            (value,),
+        )
+
+
+def test_zero_weight_components_keep_measured_values(db):
+    components = db.execute("SELECT components FROM user_feed LIMIT 1").fetchone()[0]
+    assert components["source_reliability"] == 0.99
+    assert components["portfolio_exposure"] == 0.3
+
+
+def test_account_delete_cascades_only_user_owned_rows(db):
+    db.execute("DELETE FROM users WHERE id = %s", (USER_A,))
+    for table in ["user_seeds", "devices", "user_feed", "feedback", "notification_log"]:
+        assert (
+            db.execute(
+                sql.SQL("SELECT count(*) FROM {} WHERE user_id = %s").format(sql.Identifier(table)),
+                (USER_A,),
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            db.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table))).fetchone()[
+                0
+            ]
+            == 1
+        )
+    for table in ["events", "articles", "entities", "why_cache", "event_claims", "usage_records"]:
+        assert (
+            db.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table))).fetchone()[
+                0
+            ]
+            > 0
+        )
+
+
+def test_merged_event_reference_is_uuid_and_preserves_loser(db):
+    db.execute(
+        "UPDATE events SET status = 'merged', merged_into = %s WHERE id = %s", (EVENT, OTHER_EVENT)
+    )
+    assert (
+        str(
+            db.execute(
+                "SELECT merged_into FROM events WHERE public_id = %s", ("evt_other",)
+            ).fetchone()[0]
+        )
+        == EVENT
+    )
+    assert db.execute("SELECT count(*) FROM events").fetchone()[0] == 2
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        db.execute("DELETE FROM events WHERE id = %s", (EVENT,))
+
+
+def test_self_merge_rejected(db):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute("UPDATE events SET status = 'merged', merged_into = id")
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE events SET severity_class = 'high', severity = 0.99",
+        "UPDATE user_seeds SET source = 'unknown'",
+        "UPDATE user_seeds SET weight = 1.1",
+        "UPDATE sources SET tier_value = 0.8",
+        "UPDATE sources SET active = true",
+        "UPDATE usage_records SET quantity = -1",
+        "UPDATE usage_records SET estimated_cost_usd = 'NaN'",
+        "UPDATE feedback SET slot_position = NULL",
+        "UPDATE feedback SET action = 'session_length'",
+        "UPDATE feedback SET session_duration_s = 'Infinity'",
+        "UPDATE user_feed SET shadow_score = 'NaN'",
+    ],
+)
+def test_invalid_values_fail_at_storage_boundary(db, statement):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.execute(statement)
+
+
+def test_feedback_allows_multiple_actions_with_distinct_idempotency_keys(db):
+    db.execute(
+        """INSERT INTO feedback
+        (user_id, event_id, action, slot_type, slot_position, idempotency_key, ts)
+        VALUES (%s, %s, 'click', 'graph', 1, 'fixture-click', now())""",
+        (USER_A, EVENT),
+    )
+    assert (
+        db.execute("SELECT count(*) FROM feedback WHERE user_id = %s", (USER_A,)).fetchone()[0] == 2
+    )
+
+
+def test_feedback_retry_rejected_even_with_fresh_row_id(db):
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute("""INSERT INTO feedback
+            (user_id, event_id, action, slot_type, slot_position, idempotency_key, ts)
+            SELECT user_id, event_id, action, slot_type, slot_position, idempotency_key, ts
+            FROM feedback LIMIT 1""")
+
+
+@pytest.mark.parametrize("column", ["shadow_score", "shadow_rank"])
+def test_shadow_measurement_cannot_be_omitted(db, column):
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        db.execute(sql.SQL("UPDATE user_feed SET {} = NULL").format(sql.Identifier(column)))
+
+
+def test_online_environment_target(database_factory, monkeypatch):
+    url = database_factory()
+    monkeypatch.setenv("TEVARTA_POSTGRES_URL", url.render_as_string(hide_password=False))
+    command.upgrade(alembic_config(), "head")
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
+                == "0001"
+            )
+    finally:
+        engine.dispose()
+
+
+def test_claim_requires_existing_evidence(db):
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        db.execute("UPDATE event_claims SET article_id = %s", (uuid4(),))
+
+
+def test_usage_request_deduplication(db):
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        db.execute("""INSERT INTO usage_records
+            (request_id, component, outcome, quantity, unit, estimated_cost_usd)
+            SELECT request_id, component, outcome, quantity, unit, estimated_cost_usd
+            FROM usage_records""")
+
+
+def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
+    engine = create_engine(database_factory())
+    try:
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.upgrade(config, "head")
+            connection.exec_driver_sql((ROOT / "fixtures/database/foundation.sql").read_text())
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.upgrade(config, "head")
+            assert connection.exec_driver_sql("SELECT count(*) FROM users").scalar() == 2
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.downgrade(config, "base")
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' "
+                    "AND tablename <> 'alembic_version'"
+                ).scalar()
+                == 0
+            )
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT count(*) FROM pg_extension WHERE extname = 'vector'"
+                ).scalar()
+                == 1
+            )
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.upgrade(config, "head")
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
+                == "0001"
+            )
+    finally:
+        engine.dispose()
+
+
+def test_offline_sql_contains_transaction_and_vector(monkeypatch):
+    monkeypatch.setenv("TEVARTA_POSTGRES_URL", "postgresql://localhost/tevarta_test")
+    config = alembic_config()
+    config.output_buffer = io.StringIO()
+    command.upgrade(config, "head", sql=True)
+    rendered = config.output_buffer.getvalue()
+    assert "BEGIN;" in rendered and "COMMIT;" in rendered
+    assert "VECTOR(1024)" in rendered
+
+
+def test_missing_target_fails_without_connecting(monkeypatch):
+    monkeypatch.delenv("TEVARTA_POSTGRES_URL", raising=False)
+    with pytest.raises(RuntimeError, match="explicitly"):
+        command.upgrade(alembic_config(), "head")
