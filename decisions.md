@@ -16,3 +16,6 @@ The frozen MVP remains the source of truth. This log records implementation choi
 2026-09-12 — SC2 demo path — Require evidence-backed Taiwan and Netherlands edges separately; do not invent ASML → Taiwan — Both founders confirm by 2026-09-16; enforce in T15.
 2026-09-12 — SC3 security routes — Propose refresh, sign-out, and account-deletion routes in T03 — Aaditya drafts; founders approve by 2026-09-16.
 2026-09-12 — SC4 portfolio schema — Propose weighted `user_seeds` as the normalized beta holding layer — Both founders confirm by 2026-09-16; revisit with broker integration after beta.
+
+2026-09-13 — T05 persistence IDs — Keep internal UUIDs and unique API-facing public IDs for users/devices/articles/events, with text entity IDs — Aaryan; preserves §5.1 UUID merge references and T03 fixtures; adapters resolve IDs at the API boundary.
+2026-09-13 — T05 schema scope — Implement frozen weighted seeds, claim evidence and invocation usage storage; do not equate implementation with SC4 approval or durable budget enforcement — Aaryan; SC4 still needs founder confirmation before final portfolio sign-off.
