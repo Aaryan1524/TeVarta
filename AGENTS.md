@@ -37,7 +37,7 @@ If authentication, the network, or a failing unrelated baseline prevents a push,
 - `main` is the only integration branch. Do not create permanent `aaryan`, `aaditya`, or `dev` branches.
 - Name a task branch `<owner>/phase-<n>/t<nn>-<outcome>`, for example `aaditya/phase-1/t03-api-contract` or `aaryan/phase-1/t08-entity-resolution`.
 - Aaditya opens a draft PR as soon as a task has a reviewable first slice, pushes updates to that same branch, and requests Aaryan when it is ready. Aaryan is the sole code reviewer and merger for Aaditya's PRs.
-- Do not create branches for every task at phase start. Create only the next assigned, unblocked task branch; delete it after merge.
+- Do not create branches for every task at phase start. Create only the next assigned, unblocked task branch. After merge, delete its remote branch; retain its local branch for founder history if useful, but do not add new work to a merged branch.
 - Make each commit one reviewable outcome. Do not combine unrelated cleanup or user-owned changes.
 - Stage explicit paths. Do not use `git add .` or another broad staging command in a non-clean working tree.
 - Use an imperative subject such as `feat(phase-1): add ambiguous alias resolution`.
