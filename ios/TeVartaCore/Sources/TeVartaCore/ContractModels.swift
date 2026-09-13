@@ -130,6 +130,44 @@ public struct FeedbackResponse: Codable, Equatable, Sendable {
     public let deduplicated: Bool
 }
 
+public enum FeedbackAction: String, Codable, Sendable {
+    case appOpen = "app_open"
+    case feedView = "feed_view"
+    case cardImpression = "card_impression"
+    case cardClick = "card_click"
+    case cardDismiss = "card_dismiss"
+    case notRelevant = "not_relevant"
+    case save
+    case pushReceived = "push_received"
+    case pushOpened = "push_opened"
+    case digestOpened = "digest_opened"
+    case seedAdded = "seed_added"
+    case seedRemoved = "seed_removed"
+    case sessionLength = "session_length"
+}
+
+public struct FeedbackRequest: Codable, Equatable, Sendable {
+    public let eventId: String?
+    public let action: FeedbackAction
+    public let slotType: String?
+    public let slotPosition: Int?
+    public let sessionDurationS: Double?
+    public let occurredAt: String
+    public let idempotencyKey: String
+
+    public init(eventId: String? = nil, action: FeedbackAction, slotType: String? = nil,
+                slotPosition: Int? = nil, sessionDurationS: Double? = nil,
+                occurredAt: String, idempotencyKey: String) {
+        self.eventId = eventId
+        self.action = action
+        self.slotType = slotType
+        self.slotPosition = slotPosition
+        self.sessionDurationS = sessionDurationS
+        self.occurredAt = occurredAt
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
 public struct AccountDeletionResponse: Codable, Equatable, Sendable {
     public let status: String
 }

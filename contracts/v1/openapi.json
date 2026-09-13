@@ -487,19 +487,37 @@
         "properties": {
           "action": {
             "enum": [
+              "app_open",
+              "feed_view",
+              "card_impression",
+              "card_click",
+              "card_dismiss",
+              "not_relevant",
+              "save",
+              "push_received",
+              "push_opened",
+              "digest_opened",
+              "seed_added",
+              "seed_removed",
+              "session_length",
               "impression",
               "click",
-              "dismiss",
-              "not_relevant",
-              "save"
+              "dismiss"
             ],
             "title": "Action",
             "type": "string"
           },
           "event_id": {
-            "pattern": "^evt_[A-Za-z0-9_-]+$",
-            "title": "Event Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^evt_[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
           },
           "idempotency_key": {
             "maxLength": 128,
@@ -512,25 +530,48 @@
             "title": "Occurred At",
             "type": "string"
           },
+          "session_duration_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Duration S"
+          },
           "slot_position": {
-            "minimum": 1.0,
-            "title": "Slot Position",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Position"
           },
           "slot_type": {
-            "enum": [
-              "graph",
-              "keyword_probe"
+            "anyOf": [
+              {
+                "enum": [
+                  "graph",
+                  "keyword_probe"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Slot Type",
-            "type": "string"
+            "title": "Slot Type"
           }
         },
         "required": [
-          "event_id",
           "action",
-          "slot_type",
-          "slot_position",
           "occurred_at",
           "idempotency_key"
         ],
@@ -1610,6 +1651,16 @@
               }
             },
             "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Feedback rate limit exceeded."
           }
         },
         "security": [

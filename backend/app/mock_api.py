@@ -38,6 +38,13 @@ from app.contracts import (
     SeedsStatusResponse,
     User,
 )
+from app.telemetry import (
+    MemoryTelemetryStore,
+    PostgresTelemetryStore,
+    RateLimitExceeded,
+    TelemetryService,
+    UnknownEvent,
+)
 
 ERROR_RESPONSES = {
     401: {"model": ErrorEnvelope, "description": "Missing, invalid, or expired access token."},
@@ -49,6 +56,19 @@ router = APIRouter(prefix="/v1", responses=ERROR_RESPONSES)
 FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "v1"
 MOCK_ACCESS_TOKEN = os.getenv("TEVARTA_MOCK_ACCESS_TOKEN", "fixture-access-token")
 bearer_scheme = HTTPBearer(auto_error=False)
+telemetry_service = TelemetryService(MemoryTelemetryStore())
+postgres_telemetry_service: TelemetryService | None = None
+
+
+def active_telemetry_service() -> TelemetryService:
+    global postgres_telemetry_service
+
+    database_url = os.getenv("TEVARTA_POSTGRES_URL")
+    if database_url and os.getenv("TEVARTA_TELEMETRY_MODE") == "postgres":
+        if postgres_telemetry_service is None:
+            postgres_telemetry_service = TelemetryService(PostgresTelemetryStore(database_url))
+        return postgres_telemetry_service
+    return telemetry_service
 
 
 class FixtureAuthError(Exception):
@@ -218,12 +238,19 @@ def register_device(
     "/feedback",
     response_model=FeedbackResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    responses={429: {"model": ErrorEnvelope, "description": "Feedback rate limit exceeded."}},
     tags=["feedback"],
 )
 def record_feedback(
-    _: FeedbackRequest, __: User = Depends(require_fixture_user)
-) -> dict[str, object]:
-    return fixture("feedback_success.json")
+    payload: FeedbackRequest, user: User = Depends(require_fixture_user)
+) -> dict[str, object] | JSONResponse:
+    try:
+        result = active_telemetry_service().record(user.id, payload)
+    except RateLimitExceeded:
+        return error_response(429, "rate_limited", "Feedback rate limit exceeded.")
+    except UnknownEvent:
+        return error_response(404, "event_not_found", "The referenced event was not found.")
+    return {"accepted": result.accepted, "deduplicated": result.deduplicated}
 
 
 def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
