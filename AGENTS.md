@@ -34,6 +34,10 @@ If authentication, the network, or a failing unrelated baseline prevents a push,
 ## Git and commit discipline
 
 - Use trunk-based development with small task branches and same-day PRs. Do not keep a branch open for an entire phase when work can land safely in smaller slices.
+- `main` is the only integration branch. Do not create permanent `aaryan`, `aaditya`, or `dev` branches.
+- Name a task branch `<owner>/phase-<n>/t<nn>-<outcome>`, for example `aaditya/phase-1/t03-api-contract` or `aaryan/phase-1/t08-entity-resolution`.
+- Aaditya opens a draft PR as soon as a task has a reviewable first slice, pushes updates to that same branch, and requests Aaryan when it is ready. Aaryan is the sole code reviewer and merger for Aaditya's PRs.
+- Do not create branches for every task at phase start. Create only the next assigned, unblocked task branch; delete it after merge.
 - Make each commit one reviewable outcome. Do not combine unrelated cleanup or user-owned changes.
 - Stage explicit paths. Do not use `git add .` or another broad staging command in a non-clean working tree.
 - Use an imperative subject such as `feat(phase-1): add ambiguous alias resolution`.
@@ -56,6 +60,8 @@ If authentication, the network, or a failing unrelated baseline prevents a push,
 - Never add `Co-authored-by` trailers or any Codex/AI attribution to commits, PRs, source files, or generated documentation.
 - Do not create empty phase-complete commits. Close a phase through its merged task commits, phase verification evidence, advisor review, and a concise PR/project update.
 - Commit and push authority does not include merging a PR or deploying to any environment. Those actions require their own explicit authorization.
+
+The frozen MVP retains one narrow exception: curated graph edges require a second human acceptance of the evidence and rationale. This is evidence review, not a general code-review obligation for Aaditya.
 
 ## Phase gates
 
