@@ -70,6 +70,32 @@ class MemoryStore:
         )
 
 
+class MultiUserStore(MemoryStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.users = {
+            "apple-sub-a": SessionUser(uuid4(), "usr_alice", "America/New_York"),
+            "apple-sub-b": SessionUser(uuid4(), "usr_bob", "Europe/London"),
+        }
+
+    def get_or_create_user(self, apple_sub: str) -> SessionUser:
+        return self.users[apple_sub]
+
+    def create_session(
+        self, user_id: UUID, refresh_token_hash: bytes, expires_at: datetime
+    ) -> StoredSession:
+        user = next(user for user in self.users.values() if user.internal_id == user_id)
+        session = StoredSession(uuid4(), user, expires_at, None)
+        self.sessions[session.id] = session
+        self.refresh_index[refresh_token_hash] = session.id
+        return session
+
+
+class TokenMappedAppleVerifier:
+    def verify(self, identity_token: str) -> str:
+        return {"alice-token": "apple-sub-a", "bob-token": "apple-sub-b"}[identity_token]
+
+
 def service(store: MemoryStore | None = None) -> tuple[SessionService, MemoryStore]:
     store = store or MemoryStore()
     return (
@@ -198,11 +224,47 @@ def test_real_mode_routes_issue_and_revoke_credentials_through_the_common_depend
         access_token = signed_in.json()["access_token"]
         refresh_token = signed_in.json()["refresh_token"]
         headers = {"Authorization": f"Bearer {access_token}"}
-        assert client.get("/v1/profile", headers=headers).status_code == 501
+        profile = client.get("/v1/profile", headers=headers)
+        assert profile.status_code == 200
+        assert profile.json()["profile"]["timezone"] == "UTC"
         assert client.post("/v1/auth/sign-out", headers=headers).status_code == 204
         assert client.get("/v1/profile", headers=headers).status_code == 401
         refreshed = client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
         assert refreshed.status_code == 401
+    finally:
+        app.state.auth_service = previous_service
+        app.state.rate_limiter = previous_limiter
+
+
+def test_second_user_cannot_read_the_first_users_profile() -> None:
+    store = MultiUserStore()
+    auth = SessionService(
+        store,
+        TokenMappedAppleVerifier(),
+        SIGNING_KEY,
+        timedelta(days=30),
+        now=lambda: NOW,
+    )
+    previous_service = app.state.auth_service
+    previous_limiter = app.state.rate_limiter
+    app.state.auth_service = auth
+    app.state.rate_limiter = FixedWindowRateLimiter(limit=10, window_seconds=60)
+    try:
+        client = TestClient(app)
+        alice = client.post("/v1/auth/apple", json={"identity_token": "alice-token"})
+        bob = client.post("/v1/auth/apple", json={"identity_token": "bob-token"})
+        assert alice.status_code == bob.status_code == 200
+
+        alice_profile = client.get(
+            "/v1/profile", headers={"Authorization": f"Bearer {alice.json()['access_token']}"}
+        )
+        bob_profile = client.get(
+            "/v1/profile", headers={"Authorization": f"Bearer {bob.json()['access_token']}"}
+        )
+
+        assert alice_profile.status_code == bob_profile.status_code == 200
+        assert alice_profile.json()["profile"]["timezone"] == "America/New_York"
+        assert bob_profile.json()["profile"]["timezone"] == "Europe/London"
     finally:
         app.state.auth_service = previous_service
         app.state.rate_limiter = previous_limiter

@@ -256,8 +256,17 @@ def delete_seed(entity_id: str, _: User = Depends(require_fixture_user)) -> Resp
 
 
 @router.get("/profile", response_model=ProfileResponse, tags=["profile"])
-def get_profile(_: User = Depends(require_fixture_user)) -> dict[str, object]:
-    return fixture("profile.json")
+def get_profile(request: Request, user: User = Depends(authenticated_user)) -> dict[str, object]:
+    # The remaining fixture routes stay unavailable in live-auth mode until
+    # their persisted, user-scoped implementations land.  A profile is safe to
+    # expose now because the authenticated user is its only source of identity.
+    if getattr(request.app.state, "auth_service", None) is None:
+        return fixture("profile.json")
+    response = fixture("profile.json")
+    profile = response["profile"]
+    assert isinstance(profile, dict)
+    profile["timezone"] = user.timezone
+    return response
 
 
 @router.patch("/profile", response_model=ProfileResponse, tags=["profile"])
