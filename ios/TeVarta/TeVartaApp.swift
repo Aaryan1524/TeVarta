@@ -10,6 +10,15 @@ private struct AuthResponse: Decodable {
     let user: User
 }
 
+private struct AppleSignInRequest: Encodable {
+    let identityToken: String
+    let authorizationCode: String?
+}
+
+private struct RefreshRequest: Encodable {
+    let refreshToken: String
+}
+
 private struct User: Codable {
     let id: String
     let timezone: String
@@ -33,6 +42,7 @@ private enum AuthenticationError: LocalizedError {
     case configuration
     case missingIdentityToken
     case invalidResponse
+    case unauthorized
     case server(String)
 
     var errorDescription: String? {
@@ -43,6 +53,8 @@ private enum AuthenticationError: LocalizedError {
             return "Apple did not return an identity token. Please try again."
         case .invalidResponse:
             return "The server returned an invalid authentication response."
+        case .unauthorized:
+            return "Your session has expired. Please sign in again."
         case let .server(message):
             return message
         }
@@ -72,12 +84,14 @@ private struct AuthAPIClient {
     func signIn(identityToken: String, authorizationCode: String?) async throws -> AuthResponse {
         try await request(
             path: "v1/auth/apple",
-            body: ["identityToken": identityToken, "authorizationCode": authorizationCode]
+            body: AppleSignInRequest(
+                identityToken: identityToken, authorizationCode: authorizationCode
+            )
         )
     }
 
     func refresh(refreshToken: String) async throws -> AuthResponse {
-        try await request(path: "v1/auth/refresh", body: ["refreshToken": refreshToken])
+        try await request(path: "v1/auth/refresh", body: RefreshRequest(refreshToken: refreshToken))
     }
 
     func signOut(accessToken: String) async throws {
@@ -85,18 +99,23 @@ private struct AuthAPIClient {
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (_, response) = try await session.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 204 else {
+        guard let response = response as? HTTPURLResponse else {
+            throw AuthenticationError.server("Sign-out could not be completed.")
+        }
+        if response.statusCode == 401 { throw AuthenticationError.unauthorized }
+        guard response.statusCode == 204 else {
             throw AuthenticationError.server("Sign-out could not be completed.")
         }
     }
 
-    private func request<T: Decodable>(path: String, body: [String: String?]) async throws -> T {
+    private func request<T: Decodable, Body: Encodable>(path: String, body: Body) async throws -> T {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw AuthenticationError.invalidResponse }
+        if response.statusCode == 401 { throw AuthenticationError.unauthorized }
         guard (200 ..< 300).contains(response.statusCode) else {
             throw AuthenticationError.server("Authentication failed. Please try again.")
         }
@@ -166,10 +185,24 @@ private final class AuthenticationViewModel: ObservableObject {
         guard let session else { return }
         isWorking = true
         defer { isWorking = false }
-        do { try await AuthAPIClient().signOut(accessToken: session.accessToken) }
-        catch { errorMessage = error.localizedDescription; return }
-        KeychainSessionStore.clear()
-        self.session = nil
+        do {
+            let activeSession: StoredSession
+            if session.expiresAt <= .now {
+                activeSession = StoredSession(
+                    response: try await AuthAPIClient().refresh(refreshToken: session.refreshToken)
+                )
+                try KeychainSessionStore.save(activeSession)
+                self.session = activeSession
+            } else {
+                activeSession = session
+            }
+            try await AuthAPIClient().signOut(accessToken: activeSession.accessToken)
+            clearSession()
+        } catch AuthenticationError.unauthorized {
+            clearSession()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func updateSession(_ operation: () async throws -> AuthResponse) async {
@@ -180,7 +213,17 @@ private final class AuthenticationViewModel: ObservableObject {
             try KeychainSessionStore.save(updated)
             session = updated
             errorMessage = nil
-        } catch { errorMessage = error.localizedDescription }
+        } catch AuthenticationError.unauthorized {
+            clearSession()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearSession() {
+        KeychainSessionStore.clear()
+        session = nil
+        errorMessage = nil
     }
 }
 
