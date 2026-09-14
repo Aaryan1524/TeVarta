@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-from app import mock_api
 from app.contracts import FeedbackRequest
 from app.main import app
 from app.telemetry import MemoryTelemetryStore, RateLimitExceeded, TelemetryService, UserRateLimiter
@@ -86,7 +85,7 @@ def test_feedback_endpoint_requires_authorization() -> None:
 
 
 def test_feedback_endpoint_deduplicates_a_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mock_api, "telemetry_service", TelemetryService(MemoryTelemetryStore()))
+    monkeypatch.setattr(app.state, "telemetry_service", TelemetryService(MemoryTelemetryStore()))
     client = TestClient(app)
     headers = {"Authorization": "Bearer fixture-access-token"}
 
@@ -102,7 +101,7 @@ def test_feedback_endpoint_deduplicates_a_retry(monkeypatch: pytest.MonkeyPatch)
 def test_feedback_endpoint_rate_limits_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime(2026, 9, 13, tzinfo=UTC)
     monkeypatch.setattr(
-        mock_api,
+        app.state,
         "telemetry_service",
         TelemetryService(MemoryTelemetryStore(), UserRateLimiter(limit=1), now=lambda: now),
     )

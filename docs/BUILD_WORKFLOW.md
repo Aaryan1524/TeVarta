@@ -15,7 +15,7 @@ main
 
 Use `<owner>/phase-<n>/t<nn>-<outcome>`. Create only the next unblocked task branch rather than pre-creating a phase. For example, Phase 1 starts with `aaryan/phase-1/t01-execution-inputs`; it then opens the task branches that T01 unblocks, including Aaditya's T02/T03 work and Aaryan's T05/T07 work.
 
-After a task merges, delete its remote branch to keep GitHub focused on active work. Founders may retain the corresponding local branch as a read-only historical pointer; never restart work from it or push it as a current task branch.
+After a task merges, retain its local and remote branch as a read-only historical pointer. Never restart work from it or push new work to it; every new task still branches from current `main`.
 
 Aaditya opens a draft PR after the first reviewable slice and keeps pushing to that branch. Aaryan is automatically requested as reviewer, watches the updates, is the sole code reviewer, and performs the merge when the PR is ready. A separate `dev` environment may exist for previews, but no `dev` branch is needed.
 

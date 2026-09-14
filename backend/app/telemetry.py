@@ -11,10 +11,7 @@ from typing import Protocol
 import psycopg
 
 from app.contracts import FeedbackRequest
-
-
-class RateLimitExceeded(RuntimeError):
-    pass
+from app.operations import RateLimitExceeded
 
 
 class UnknownEvent(RuntimeError):

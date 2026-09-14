@@ -1640,7 +1640,7 @@
                 }
               }
             },
-            "description": "Requested resource was not found."
+            "description": "The referenced event was not found."
           },
           "422": {
             "content": {

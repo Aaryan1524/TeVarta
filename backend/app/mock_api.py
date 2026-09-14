@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.requests import Request
 
+from app.auth import AuthenticationError, SessionService
 from app.contracts import (
     AccountDeletionResponse,
     AppleAuthRequest,
@@ -38,13 +39,7 @@ from app.contracts import (
     SeedsStatusResponse,
     User,
 )
-from app.telemetry import (
-    MemoryTelemetryStore,
-    PostgresTelemetryStore,
-    RateLimitExceeded,
-    TelemetryService,
-    UnknownEvent,
-)
+from app.telemetry import TelemetryService, UnknownEvent
 
 ERROR_RESPONSES = {
     401: {"model": ErrorEnvelope, "description": "Missing, invalid, or expired access token."},
@@ -56,23 +51,14 @@ router = APIRouter(prefix="/v1", responses=ERROR_RESPONSES)
 FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "v1"
 MOCK_ACCESS_TOKEN = os.getenv("TEVARTA_MOCK_ACCESS_TOKEN", "fixture-access-token")
 bearer_scheme = HTTPBearer(auto_error=False)
-telemetry_service = TelemetryService(MemoryTelemetryStore())
-postgres_telemetry_service: TelemetryService | None = None
-
-
-def active_telemetry_service() -> TelemetryService:
-    global postgres_telemetry_service
-
-    database_url = os.getenv("TEVARTA_POSTGRES_URL")
-    if database_url and os.getenv("TEVARTA_TELEMETRY_MODE") == "postgres":
-        if postgres_telemetry_service is None:
-            postgres_telemetry_service = TelemetryService(PostgresTelemetryStore(database_url))
-        return postgres_telemetry_service
-    return telemetry_service
 
 
 class FixtureAuthError(Exception):
     """Raised when the fixture server receives a missing or expired bearer token."""
+
+
+class LiveDataUnavailable(Exception):
+    """Raised when a fixture-only route is called after real auth is enabled."""
 
 
 def fixture(name: str) -> dict[str, object]:
@@ -97,19 +83,56 @@ def error_response(
     )
 
 
-def require_fixture_user(
+def _rate_limit(request: Request, scope: str) -> None:
+    limiter = request.app.state.rate_limiter
+    host = request.client.host if request.client else "unknown"
+    limiter.check(f"{scope}:{host}")
+
+
+def require_auth_rate_limit(request: Request) -> None:
+    _rate_limit(request, "auth")
+
+
+def authenticated_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> User:
     if credentials is None or credentials.scheme.casefold() != "bearer":
         raise FixtureAuthError
-    if credentials.credentials != MOCK_ACCESS_TOKEN:
-        raise FixtureAuthError
-    return User(id="usr_fixture", timezone="America/New_York")
+    service: SessionService | None = getattr(request.app.state, "auth_service", None)
+    if service is None:
+        if credentials.credentials != MOCK_ACCESS_TOKEN:
+            raise FixtureAuthError
+        return User(id="usr_fixture", timezone="America/New_York")
+    try:
+        current = service.current_user(credentials.credentials)
+    except AuthenticationError as exc:
+        raise FixtureAuthError from exc
+    return User(id=current.id, timezone=current.timezone)
+
+
+def require_fixture_user(request: Request, user: User = Depends(authenticated_user)) -> User:
+    # T25/T32 replace these fixture handlers with persisted, user-scoped reads.
+    # Never report another account's fixture data as a real authenticated result.
+    if getattr(request.app.state, "auth_service", None) is not None:
+        raise LiveDataUnavailable
+    return user
 
 
 @router.post("/auth/apple", response_model=AuthResponse, tags=["authentication"])
-def authenticate_with_apple(_: AppleAuthRequest) -> dict[str, object]:
-    return fixture("auth_success.json")
+def authenticate_with_apple(request: Request, body: AppleAuthRequest) -> dict[str, object]:
+    service: SessionService | None = getattr(request.app.state, "auth_service", None)
+    if service is None:
+        return fixture("auth_success.json")
+    _rate_limit(request, "auth")
+    access_token, refresh_token, expires_at, user = service.authenticate_apple(body.identity_token)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+        "expires_at": expires_at,
+        "user": {"id": user.public_id, "timezone": user.timezone},
+    }
 
 
 @router.post(
@@ -118,8 +141,19 @@ def authenticate_with_apple(_: AppleAuthRequest) -> dict[str, object]:
     tags=["authentication"],
     summary="SC3 proposal: exchange a refresh token for a short-lived session",
 )
-def refresh_session(_: RefreshRequest) -> dict[str, object]:
-    return fixture("auth_success.json")
+def refresh_session(request: Request, body: RefreshRequest) -> dict[str, object]:
+    service: SessionService | None = getattr(request.app.state, "auth_service", None)
+    if service is None:
+        return fixture("auth_success.json")
+    _rate_limit(request, "auth")
+    access_token, refresh_token, expires_at, user = service.refresh(body.refresh_token)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+        "expires_at": expires_at,
+        "user": {"id": user.public_id, "timezone": user.timezone},
+    }
 
 
 @router.post(
@@ -128,7 +162,16 @@ def refresh_session(_: RefreshRequest) -> dict[str, object]:
     tags=["authentication"],
     summary="SC3 proposal: revoke the current session",
 )
-def sign_out(_: User = Depends(require_fixture_user)) -> Response:
+def sign_out(
+    request: Request,
+    _: None = Depends(require_auth_rate_limit),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    __: User = Depends(authenticated_user),
+) -> Response:
+    service: SessionService | None = getattr(request.app.state, "auth_service", None)
+    if service is not None:
+        assert credentials is not None
+        service.sign_out(credentials.credentials)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -214,8 +257,17 @@ def delete_seed(entity_id: str, _: User = Depends(require_fixture_user)) -> Resp
 
 
 @router.get("/profile", response_model=ProfileResponse, tags=["profile"])
-def get_profile(_: User = Depends(require_fixture_user)) -> dict[str, object]:
-    return fixture("profile.json")
+def get_profile(request: Request, user: User = Depends(authenticated_user)) -> dict[str, object]:
+    # The remaining fixture routes stay unavailable in live-auth mode until
+    # their persisted, user-scoped implementations land.  A profile is safe to
+    # expose now because the authenticated user is its only source of identity.
+    if getattr(request.app.state, "auth_service", None) is None:
+        return fixture("profile.json")
+    response = fixture("profile.json")
+    profile = response["profile"]
+    assert isinstance(profile, dict)
+    profile["timezone"] = user.timezone
+    return response
 
 
 @router.patch("/profile", response_model=ProfileResponse, tags=["profile"])
@@ -238,16 +290,18 @@ def register_device(
     "/feedback",
     response_model=FeedbackResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    responses={429: {"model": ErrorEnvelope, "description": "Feedback rate limit exceeded."}},
+    responses={
+        404: {"model": ErrorEnvelope, "description": "The referenced event was not found."},
+        429: {"model": ErrorEnvelope, "description": "Feedback rate limit exceeded."},
+    },
     tags=["feedback"],
 )
 def record_feedback(
-    payload: FeedbackRequest, user: User = Depends(require_fixture_user)
+    request: Request, payload: FeedbackRequest, user: User = Depends(authenticated_user)
 ) -> dict[str, object] | JSONResponse:
+    service: TelemetryService = request.app.state.telemetry_service
     try:
-        result = active_telemetry_service().record(user.id, payload)
-    except RateLimitExceeded:
-        return error_response(429, "rate_limited", "Feedback rate limit exceeded.")
+        result = service.record(user.id, payload)
     except UnknownEvent:
         return error_response(404, "event_not_found", "The referenced event was not found.")
     return {"accepted": result.accepted, "deduplicated": result.deduplicated}
