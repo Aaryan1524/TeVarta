@@ -17,5 +17,5 @@ jobs:
         # to pass on personal/private repositories while still executing if GHAS
         # or public repository settings are active. Dependabot (.github/dependabot.yml)
         # provides baseline dependency vulnerability scanning per MVP §20.2.
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         continue-on-error: true
