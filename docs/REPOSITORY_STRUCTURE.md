@@ -12,7 +12,8 @@ directory only when its owning task adds a tracked artifact.
 │   └── components/v1/       # Aaryan's draft worker/graph contracts (T04)
 ├── docs/                    # workflow, task records, and architecture notes
 ├── fixtures/                # deterministic, non-production contract examples
-│   └── components/v1/       # T04 fixture set
+│   ├── components/v1/       # T04 fixture set
+│   └── scoring/v1/          # T09 numerical golden cases
 ├── graph/                   # curated edge files and graph-specific artifacts (T14+)
 ├── backend/                 # FastAPI, Celery, migrations, and Python tests (T02)
 ├── ios/                     # SwiftUI application and Xcode project (T02)
@@ -30,7 +31,7 @@ directory only when its owning task adds a tracked artifact.
 |---|---|---|
 | `contracts/` | Stable, language-neutral schemas that more than one component consumes | Shared; Aaryan authors T04, Aaditya authors T03 API contracts |
 | `fixtures/` | JSON/YAML examples used by contract, backend, and Swift decoding tests | Shared |
-| `backend/` | FastAPI/Celery application code, Alembic migrations, and Python tests | Aaditya creates the skeleton in T02; Aaryan owns graph/pipeline modules thereafter |
+| `backend/` | FastAPI/Celery application code, Alembic migrations, deterministic scoring, and Python tests | Aaditya creates the skeleton in T02; Aaryan owns graph/pipeline modules thereafter |
 | `ios/` | Xcode project, SwiftUI targets, and Swift tests | Aaditya |
 | `graph/` | Curated-edge YAML and graph validation/load evidence | Aaryan, with Aaditya's evidence acceptance for curated edges |
 | `config/` | Checked-in, non-secret operational configuration | Task owner; secrets never belong here |
