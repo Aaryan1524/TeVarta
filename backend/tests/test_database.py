@@ -11,9 +11,9 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.auth import PostgresSessionStore
 from app.entity_resolution import EntityResolver
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
-from app.auth import PostgresSessionStore
 from psycopg import sql
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
