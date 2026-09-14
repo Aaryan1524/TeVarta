@@ -13,7 +13,7 @@ def test_sec_payload_creates_stable_catalog_ids_and_identifier_aliases() -> None
         ("ent_sec_0000320193", "0000320193", "AAPL"),
         ("ent_sec_0001000184", "0001000184", "SNDK"),
     ]
-    assert normalize_alias("  Apple   Inc. ") == "apple inc."
+    assert normalize_alias("  Apple   Inc. ") == "apple"
 
 
 @pytest.mark.parametrize(

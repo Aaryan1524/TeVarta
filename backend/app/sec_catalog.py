@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -33,7 +34,11 @@ class CatalogImportReport:
 
 
 def normalize_alias(value: str) -> str:
-    normalized = " ".join(value.casefold().split())
+    normalized = value.casefold().strip()
+    normalized = re.sub(
+        r"\b(incorporated|inc|corporation|corp|company|co|limited|ltd|plc)\b", "", normalized
+    )
+    normalized = re.sub(r"[^a-z0-9]+", "", normalized)
     if not normalized:
         raise CatalogInputError("company title must be non-empty")
     return normalized
