@@ -61,6 +61,7 @@ class PostgresTelemetryStore:
                     FROM users
                     LEFT JOIN events ON events.public_id = %(event_id)s
                     WHERE users.public_id = %(user_id)s
+                      AND (%(event_id)s IS NULL OR events.id IS NOT NULL)
                     ON CONFLICT (user_id, idempotency_key) DO NOTHING
                     RETURNING id
                     """,
