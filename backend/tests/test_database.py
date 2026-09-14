@@ -9,6 +9,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.entity_resolution import EntityResolver
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from psycopg import sql
 from sqlalchemy import create_engine
@@ -147,6 +148,28 @@ def test_sec_catalog_reimport_is_idempotent_and_keeps_entities_catalog(db):
     ).fetchone()[0]
     assert status == "catalog"
     assert alias_count == 3
+
+
+def test_entity_resolver_logs_unresolved_aliases_without_tagging(db):
+    db.execute(
+        "INSERT INTO entities (entity_id, canonical_name, type, seed_count) VALUES "
+        "('ent_mercury_a', 'Mercury A', 'Company', 1), "
+        "('ent_mercury_b', 'Mercury B', 'Company', 1)"
+    )
+    db.execute(
+        "INSERT INTO entity_aliases VALUES "
+        "('mercury', 'ent_mercury_a', 'fixture', 1, false), "
+        "('mercury', 'ent_mercury_b', 'fixture', 1, false)"
+    )
+
+    result = EntityResolver(db).resolve("Mercury")
+
+    assert result.status == "ambiguous"
+    assert result.entity_id is None
+    miss_count = db.execute(
+        "SELECT count(*) FROM resolution_misses WHERE surface_form = 'Mercury'"
+    ).fetchone()[0]
+    assert miss_count == 1
 
 
 @pytest.mark.parametrize("table", ["user_seeds", "user_feed", "feedback", "event_articles"])
