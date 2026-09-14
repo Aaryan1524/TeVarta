@@ -9,6 +9,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from psycopg import sql
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
@@ -123,6 +124,29 @@ def test_alias_can_have_multiple_candidates_but_identifier_cannot(db):
         db.execute(
             """INSERT INTO entity_aliases VALUES ('nasdaq:aapl', 'ent_fruit', 'fixture', 1, true)"""
         )
+
+
+def test_sec_catalog_reimport_is_idempotent_and_keeps_entities_catalog(db):
+    companies = parse_company_tickers(
+        {
+            "0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
+            "1": {"cik_str": 1000184, "ticker": "SNDK", "title": "SanDisk Corporation"},
+        }
+    )
+
+    first = import_sec_catalog(db, companies)
+    second = import_sec_catalog(db, companies)
+
+    assert first == second
+    entity_id = "ent_sec_0000320193"
+    status = db.execute(
+        "SELECT status FROM entities WHERE entity_id = %s", (entity_id,)
+    ).fetchone()[0]
+    alias_count = db.execute(
+        "SELECT count(*) FROM entity_aliases WHERE entity_id = %s", (entity_id,)
+    ).fetchone()[0]
+    assert status == "catalog"
+    assert alias_count == 3
 
 
 @pytest.mark.parametrize("table", ["user_seeds", "user_feed", "feedback", "event_articles"])
