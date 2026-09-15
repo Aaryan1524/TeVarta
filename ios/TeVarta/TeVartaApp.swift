@@ -529,7 +529,7 @@ private struct FixtureAPIClient {
     private let decoder: JSONDecoder
     init(bundle: Bundle = .main, session: URLSession = .shared) {
         let configured = bundle.object(forInfoDictionaryKey: "TEVARTA_API_BASE_URL") as? String
-        baseURL = URL(string: configured ?? "https://api.tevarta.example")!
+        baseURL = URL(string: configured ?? "http://127.0.0.1:8000")!
         self.session = session; decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
     }
     func feed(scenario: String? = nil, token: String = "fixture-access-token") async throws -> FeedResponse { try await get("v1/feed", query: scenario.map { [URLQueryItem(name: "scenario", value: $0)] }, token: token) }
