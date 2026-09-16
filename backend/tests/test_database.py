@@ -2,6 +2,8 @@
 
 import io
 import os
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +11,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.auth import PostgresSessionStore
 from app.entity_resolution import EntityResolver
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from psycopg import sql
@@ -44,6 +47,7 @@ TABLES = {
     "demand_log",
     "event_claims",
     "usage_records",
+    "auth_sessions",
 }
 
 
@@ -347,10 +351,53 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0001"
+                == "0002"
             )
     finally:
         engine.dispose()
+
+
+def test_session_store_persists_one_user_and_consumes_refresh_tokens_atomically(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    store = PostgresSessionStore(dsn)
+    first_user = store.get_or_create_user("apple-sub-a")
+    assert store.get_or_create_user("apple-sub-a") == first_user
+    second_user = store.get_or_create_user("apple-sub-b")
+    assert second_user.internal_id != first_user.internal_id
+
+    expires_at = datetime.now(UTC) + timedelta(days=1)
+    original = store.create_session(first_user.internal_id, b"original-refresh", expires_at)
+    replacement = store.replace_session(b"original-refresh", b"replacement-refresh", expires_at)
+
+    assert replacement is not None
+    assert replacement.user == first_user
+    assert store.find_active_session(original.id) is None
+    assert store.replace_session(b"original-refresh", b"another-refresh", expires_at) is None
+    assert store.find_active_session(replacement.id) is not None
+
+
+def test_session_refresh_allows_one_concurrent_consumer_and_rolls_back_on_conflict(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    store = PostgresSessionStore(dsn)
+    user = store.get_or_create_user("apple-sub-concurrent")
+    expires_at = datetime.now(UTC) + timedelta(days=1)
+    store.create_session(user.internal_id, b"concurrent-refresh", expires_at)
+
+    def replace(index: int):
+        return PostgresSessionStore(dsn).replace_session(
+            b"concurrent-refresh", f"concurrent-replacement-{index}".encode(), expires_at
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        replacements = list(executor.map(replace, range(2)))
+    assert sum(replacement is not None for replacement in replacements) == 1
+
+    original = store.create_session(user.internal_id, b"rollback-refresh", expires_at)
+    store.create_session(user.internal_id, b"conflicting-replacement", expires_at)
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        store.replace_session(b"rollback-refresh", b"conflicting-replacement", expires_at)
+    assert store.find_active_session(original.id) is not None
+    assert store.replace_session(b"rollback-refresh", b"valid-replacement", expires_at) is not None
 
 
 def test_claim_requires_existing_evidence(db):
@@ -398,7 +445,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0001"
+                == "0002"
             )
     finally:
         engine.dispose()

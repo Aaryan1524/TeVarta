@@ -22,3 +22,4 @@ xcuserdata/
 # Build products
 build/
 .build/
+*.egg-info/

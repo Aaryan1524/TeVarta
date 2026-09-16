@@ -11,10 +11,12 @@ import copy
 import logging
 import os
 import re
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from threading import Lock
+from time import monotonic
 from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,7 +24,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 SENSITIVE_FIELD_NAMES = frozenset(
-    {"access_token", "apns_token", "apple_sub", "authorization", "cookie", "set-cookie"}
+    {
+        "access_token", "refresh_token", "identity_token", "authorization_code", "apns_token",
+        "apple_sub", "authorization", "cookie", "set-cookie", "tevarta_jwt_signing_key",
+    }
 )
 REDACTED = "[REDACTED]"
 
@@ -33,6 +38,30 @@ class EnvironmentConfigurationError(ValueError):
 
 class SearchBudgetExceeded(RuntimeError):
     """Raised before a search provider is called beyond its monthly allocation."""
+
+
+class RateLimitExceeded(RuntimeError):
+    """Raised before a sensitive endpoint receives more than its small allowance."""
+
+
+class FixedWindowRateLimiter:
+    """Process-local safety limit; deployed instances must use a shared edge limit."""
+
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self._lock = Lock()
+        self._attempts: dict[str, deque[float]] = {}
+
+    def check(self, key: str, now: float | None = None) -> None:
+        current = monotonic() if now is None else now
+        with self._lock:
+            attempts = self._attempts.setdefault(key, deque())
+            while attempts and attempts[0] <= current - self.window_seconds:
+                attempts.popleft()
+            if len(attempts) >= self.limit:
+                raise RateLimitExceeded("rate limit exceeded")
+            attempts.append(current)
 
 
 @dataclass(frozen=True)
@@ -92,8 +121,10 @@ def redact_value(value: Any, field_name: str | None = None) -> Any:
     if isinstance(value, str):
         value = re.sub(r"(?i)(bearer\s+)[^\s,]+", r"\1" + REDACTED, value)
         value = re.sub(
-            r"(?i)(access_token|apns_token|apple_sub)\s*([=:])\s*[^\s,&]+",
-            r"\1\2" + REDACTED,
+            r"(?i)((?:[\"']?)(?:access_token|refresh_token|identity_token|authorization_code|"
+            r"apns_token|apple_sub|tevarta_jwt_signing_key)(?:[\"']?)\s*[:=]\s*(?:[\"']?))"
+            r"[^\s,}&\"']+",
+            r"\1" + REDACTED,
             value,
         )
     return value
