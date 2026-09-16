@@ -23,6 +23,7 @@ from app.operations import (
     RateLimitExceeded,
     install_log_redaction,
 )
+from app.telemetry import MemoryTelemetryStore, PostgresTelemetryStore, TelemetryService
 
 app = FastAPI(
     title="Te Varta API",
@@ -53,6 +54,11 @@ app.state.auth_service = (
     else None
 )
 app.state.rate_limiter = FixedWindowRateLimiter(limit=10, window_seconds=60)
+app.state.telemetry_service = (
+    TelemetryService(PostgresTelemetryStore(settings.postgres_url))
+    if app.state.auth_service is not None
+    else TelemetryService(MemoryTelemetryStore())
+)
 if settings.name == "production":
     app.add_middleware(HTTPSRedirectMiddleware)
     app.add_middleware(HSTSMiddleware)
