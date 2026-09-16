@@ -11,6 +11,7 @@ dependencies = [
   "alembic>=1.13,<2",
   "celery>=5.4,<6",
   "fastapi>=0.115,<1",
+  "neo4j>=5.26,<6",
   "pydantic>=2.9,<3",
   "PyJWT[crypto]>=2.10,<3",
   "psycopg[binary]>=3.2,<4",
@@ -35,7 +36,10 @@ where = ["backend"]
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 addopts = "-q"
-markers = ["database: integration tests using disposable PostgreSQL databases"]
+markers = [
+  "database: integration tests using disposable PostgreSQL databases",
+  "neo4j: integration tests using a disposable Neo4j database",
+]
 
 [tool.ruff]
 target-version = "py312"
