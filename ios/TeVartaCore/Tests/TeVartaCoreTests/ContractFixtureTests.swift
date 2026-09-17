@@ -36,4 +36,104 @@ struct ContractFixtureTests {
         #expect(merged.event.eventId == "evt_fremont_halt")
         #expect(merged.mergedFrom == ["evt_fremont_initial"])
     }
+
+    @Test func telemetryClientSendsTheAuthenticatedTelemetryEnvelope() async throws {
+        let transport = RecordingFeedbackTransport(
+            responseData: try fixture("feedback_success.json"),
+            response: HTTPURLResponse(
+                url: URL(string: "https://api.example.test/v1/feedback")!,
+                statusCode: 202,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+        )
+        let client = TelemetryClient(
+            baseURL: URL(string: "https://api.example.test/")!,
+            accessToken: { "access-token" },
+            transport: transport
+        )
+        let event = FeedbackRequest(
+            eventId: "evt_test",
+            action: .cardImpression,
+            slotType: "graph",
+            slotPosition: 1,
+            occurredAt: "2026-09-13T00:00:00Z",
+            idempotencyKey: "telemetry-key-1"
+        )
+
+        let result = try await client.record(event)
+
+        #expect(result.accepted)
+        #expect(transport.request?.url?.path == "/v1/feedback")
+        #expect(transport.request?.value(forHTTPHeaderField: "Authorization") == "Bearer access-token")
+        let sent = try ContractDecoder.json.decode(FeedbackRequest.self, from: transport.request!.httpBody!)
+        #expect(sent == event)
+    }
+
+    @Test func telemetryClientRejectsMissingAccessToken() async {
+        let client = TelemetryClient(
+            baseURL: URL(string: "https://api.example.test/")!,
+            accessToken: { nil },
+            transport: RecordingFeedbackTransport(responseData: Data(), response: URLResponse())
+        )
+
+        await #expect(throws: TelemetryClientError.missingAccessToken) {
+            try await client.record(
+                FeedbackRequest(
+                    action: .appOpen,
+                    occurredAt: "2026-09-13T00:00:00Z",
+                    idempotencyKey: "telemetry-key-1"
+                )
+            )
+        }
+    }
+
+    @Test func telemetryClientExposesServerRejectionWithoutDroppingItsCode() async throws {
+        let transport = RecordingFeedbackTransport(
+            responseData: try fixture("errors/expired_auth.json"),
+            response: HTTPURLResponse(
+                url: URL(string: "https://api.example.test/v1/feedback")!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+        )
+        let client = TelemetryClient(
+            baseURL: URL(string: "https://api.example.test/")!,
+            accessToken: { "expired-token" },
+            transport: transport
+        )
+
+        await #expect(
+            throws: TelemetryClientError.rejected(
+                statusCode: 401,
+                code: "expired_auth",
+                message: "Your session has expired. Refresh your session and try again."
+            )
+        ) {
+            try await client.record(
+                FeedbackRequest(
+                    action: .appOpen,
+                    occurredAt: "2026-09-13T00:00:00Z",
+                    idempotencyKey: "telemetry-key-1"
+                )
+            )
+        }
+    }
+}
+
+private final class RecordingFeedbackTransport: FeedbackTransport, @unchecked Sendable {
+    private let responseData: Data
+    private let response: URLResponse
+    private(set) var request: URLRequest?
+
+    init(responseData: Data, response: URLResponse) {
+        self.responseData = responseData
+        self.response = response
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        self.request = request
+        return (responseData, response)
+    }
 }

@@ -39,6 +39,7 @@ from app.contracts import (
     SeedsStatusResponse,
     User,
 )
+from app.telemetry import TelemetryService, UnknownEvent
 
 ERROR_RESPONSES = {
     401: {"model": ErrorEnvelope, "description": "Missing, invalid, or expired access token."},
@@ -289,13 +290,21 @@ def register_device(
     "/feedback",
     response_model=FeedbackResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        404: {"model": ErrorEnvelope, "description": "The referenced event was not found."},
+        429: {"model": ErrorEnvelope, "description": "Feedback rate limit exceeded."},
+    },
     tags=["feedback"],
 )
 def record_feedback(
-    request: Request, _: FeedbackRequest, __: User = Depends(require_fixture_user)
-) -> dict[str, object]:
-    _rate_limit(request, "feedback")
-    return fixture("feedback_success.json")
+    request: Request, payload: FeedbackRequest, user: User = Depends(authenticated_user)
+) -> dict[str, object] | JSONResponse:
+    service: TelemetryService = request.app.state.telemetry_service
+    try:
+        result = service.record(user.id, payload)
+    except UnknownEvent:
+        return error_response(404, "event_not_found", "The referenced event was not found.")
+    return {"accepted": result.accepted, "deduplicated": result.deduplicated}
 
 
 def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:

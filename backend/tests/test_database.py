@@ -12,8 +12,10 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from app.auth import PostgresSessionStore
+from app.contracts import FeedbackRequest
 from app.entity_resolution import EntityResolver
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
+from app.telemetry import PostgresTelemetryStore, UnknownEvent
 from psycopg import sql
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
@@ -398,6 +400,25 @@ def test_session_refresh_allows_one_concurrent_consumer_and_rolls_back_on_confli
         store.replace_session(b"rollback-refresh", b"conflicting-replacement", expires_at)
     assert store.find_active_session(original.id) is not None
     assert store.replace_session(b"rollback-refresh", b"valid-replacement", expires_at) is not None
+
+
+def test_telemetry_store_rejects_unknown_card_event(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    store = PostgresTelemetryStore(dsn)
+    user = PostgresSessionStore(dsn).get_or_create_user("apple-sub-telemetry")
+    event = FeedbackRequest.model_validate(
+        {
+            "event_id": "evt_missing",
+            "action": "card_click",
+            "slot_type": "graph",
+            "slot_position": 1,
+            "occurred_at": "2026-09-14T00:00:00Z",
+            "idempotency_key": "unknown-event-key",
+        }
+    )
+
+    with pytest.raises(UnknownEvent):
+        store.record(user.public_id, event)
 
 
 def test_claim_requires_existing_evidence(db):

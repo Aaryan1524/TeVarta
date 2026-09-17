@@ -4,10 +4,11 @@ These models deliberately describe the API boundary, not database rows. T05 and
 later tasks may add persistence behind this interface without changing it.
 """
 
+import math
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -175,12 +176,76 @@ class DeviceResponse(StrictModel):
 
 
 class FeedbackRequest(StrictModel):
-    event_id: str = Field(pattern=r"^evt_[A-Za-z0-9_-]+$")
-    action: Literal["impression", "click", "dismiss", "not_relevant", "save"]
-    slot_type: Literal["graph", "keyword_probe"]
-    slot_position: int = Field(ge=1)
+    event_id: str | None = Field(default=None, pattern=r"^evt_[A-Za-z0-9_-]+$")
+    action: Literal[
+        "app_open",
+        "feed_view",
+        "card_impression",
+        "card_click",
+        "card_dismiss",
+        "not_relevant",
+        "save",
+        "push_received",
+        "push_opened",
+        "digest_opened",
+        "seed_added",
+        "seed_removed",
+        "session_length",
+        "impression",
+        "click",
+        "dismiss",
+    ]
+    slot_type: Literal["graph", "keyword_probe"] | None = None
+    slot_position: int | None = Field(default=None, ge=1)
+    session_duration_s: float | None = Field(default=None, ge=0)
     occurred_at: datetime
     idempotency_key: str = Field(min_length=8, max_length=128)
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def normalize_action_alias(cls, value: str) -> str:
+        aliases = {
+            "impression": "card_impression",
+            "click": "card_click",
+            "dismiss": "card_dismiss",
+        }
+        return aliases.get(value, value)
+
+    @field_validator("session_duration_s")
+    @classmethod
+    def require_finite_duration(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("session_duration_s must be finite")
+        return value
+
+    @field_validator("occurred_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("occurred_at must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "FeedbackRequest":
+        if (self.slot_type is None) != (self.slot_position is None):
+            raise ValueError("slot_type and slot_position must be sent together")
+        card_actions = {
+            "card_impression",
+            "card_click",
+            "card_dismiss",
+            "impression",
+            "click",
+            "dismiss",
+            "not_relevant",
+            "save",
+        }
+        if self.action in card_actions and (
+            self.event_id is None or self.slot_type is None or self.slot_position is None
+        ):
+            raise ValueError("card actions require event_id, slot_type, and slot_position")
+        if self.action == "session_length" and self.session_duration_s is None:
+            raise ValueError("session_length requires session_duration_s")
+        return self
 
 
 class FeedbackResponse(StrictModel):
