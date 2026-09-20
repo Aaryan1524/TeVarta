@@ -1,0 +1,9 @@
+[
+  {
+    "date": "2026-09-14",
+    "mode": "PR Review",
+    "score": 90,
+    "findings": {"critical": 0, "warning": 2, "suggestion": 0},
+    "scope": "branch changes vs origin/main (23 files; sampled high-risk auth and telemetry paths)"
+  }
+]

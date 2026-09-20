@@ -130,6 +130,122 @@ public struct FeedbackResponse: Codable, Equatable, Sendable {
     public let deduplicated: Bool
 }
 
+public enum FeedbackAction: String, CaseIterable, Codable, Sendable {
+    case appOpen = "app_open"
+    case feedView = "feed_view"
+    case cardImpression = "card_impression"
+    case cardClick = "card_click"
+    case cardDismiss = "card_dismiss"
+    case notRelevant = "not_relevant"
+    case save
+    case pushReceived = "push_received"
+    case pushOpened = "push_opened"
+    case digestOpened = "digest_opened"
+    case seedAdded = "seed_added"
+    case seedRemoved = "seed_removed"
+    case sessionLength = "session_length"
+}
+
+public struct FeedbackRequest: Codable, Equatable, Sendable {
+    public let eventId: String?
+    public let action: FeedbackAction
+    public let slotType: String?
+    public let slotPosition: Int?
+    public let sessionDurationS: Double?
+    public let occurredAt: String
+    public let idempotencyKey: String
+
+    public init(eventId: String? = nil, action: FeedbackAction, slotType: String? = nil,
+                slotPosition: Int? = nil, sessionDurationS: Double? = nil,
+                occurredAt: String, idempotencyKey: String) {
+        self.eventId = eventId
+        self.action = action
+        self.slotType = slotType
+        self.slotPosition = slotPosition
+        self.sessionDurationS = sessionDurationS
+        self.occurredAt = occurredAt
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
+public enum TelemetryClientError: Error, Equatable, Sendable {
+    case missingAccessToken
+    case invalidResponse
+    case rejected(statusCode: Int, code: String?, message: String?)
+}
+
+public protocol FeedbackTransport: Sendable {
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+public struct URLSessionFeedbackTransport: FeedbackTransport {
+    private let session: URLSession
+
+    public init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    public func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request)
+    }
+}
+
+/// The app-facing interface for recording the §16 telemetry envelope.
+///
+/// The access token is supplied at send time so a refreshed session is used
+/// without storing credentials in the telemetry client.
+public struct TelemetryClient<Transport: FeedbackTransport>: Sendable {
+    private let baseURL: URL
+    private let accessToken: @Sendable () async -> String?
+    private let transport: Transport
+
+    public init(
+        baseURL: URL,
+        accessToken: @escaping @Sendable () async -> String?,
+        transport: Transport
+    ) {
+        self.baseURL = baseURL
+        self.accessToken = accessToken
+        self.transport = transport
+    }
+
+    public func record(_ event: FeedbackRequest) async throws -> FeedbackResponse {
+        guard let token = await accessToken(), !token.isEmpty else {
+            throw TelemetryClientError.missingAccessToken
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "v1/feedback"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try ContractEncoder.json.encode(event)
+
+        let (data, response) = try await transport.send(request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TelemetryClientError.invalidResponse
+        }
+        guard (200 ..< 300).contains(httpResponse.statusCode) else {
+            let apiError = try? ContractDecoder.json.decode(ErrorEnvelope.self, from: data)
+            throw TelemetryClientError.rejected(
+                statusCode: httpResponse.statusCode,
+                code: apiError?.error.code,
+                message: apiError?.error.message
+            )
+        }
+        return try ContractDecoder.json.decode(FeedbackResponse.self, from: data)
+    }
+}
+
+public extension TelemetryClient where Transport == URLSessionFeedbackTransport {
+    init(baseURL: URL, accessToken: @escaping @Sendable () async -> String?) {
+        self.init(
+            baseURL: baseURL,
+            accessToken: accessToken,
+            transport: URLSessionFeedbackTransport()
+        )
+    }
+}
+
 public struct AccountDeletionResponse: Codable, Equatable, Sendable {
     public let status: String
 }
@@ -155,5 +271,13 @@ public enum ContractDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
+    }()
+}
+
+public enum ContractEncoder {
+    public static let json: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        return encoder
     }()
 }

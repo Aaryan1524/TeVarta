@@ -10,7 +10,7 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Dependency review
         # On private repositories without GitHub Advanced Security (GHAS), the
         # Dependency Review API is unavailable. continue-on-error allows PR checks
