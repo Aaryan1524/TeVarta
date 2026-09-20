@@ -247,6 +247,50 @@ struct TeVartaApp: App {
     }
 }
 
+private struct ContentView: View {
+    @ObservedObject var authentication: AuthenticationViewModel
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "newspaper")
+                .font(.system(size: 44))
+                .foregroundStyle(Color.accentColor)
+            Text("Te Varta")
+                .font(.largeTitle.bold())
+            if let user = authentication.session?.user {
+                Text("Signed in as \(user.id)")
+                    .foregroundStyle(.secondary)
+                Button("Sign out", role: .destructive) {
+                    Task { await authentication.signOut() }
+                }
+                .disabled(authentication.isWorking)
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = []
+                } onCompletion: { result in
+                    guard case let .success(authorization) = result,
+                          let credential = authorization.credential as? ASAuthorizationAppleIDCredential
+                    else {
+                        authentication.errorMessage = "Apple sign-in was cancelled or failed."
+                        return
+                    }
+                    Task { await authentication.signIn(credential: credential) }
+                }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 50)
+                .disabled(authentication.isWorking)
+            }
+            if let errorMessage = authentication.errorMessage {
+                Text(errorMessage)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .navigationTitle("Your world")
+    }
+}
+
 private struct TeVartaRootView: View {
     @StateObject private var store = FixtureStore()
 
@@ -434,7 +478,6 @@ private struct GraphConstructionView: View {
             if isBuilt { Button("BEGIN") { finish() }.tevartaPrimaryButton() }
             else if let error = store.graphError { ErrorCallout(message: error) { Task { await construct() } } }
             else { ProgressView("Constructing fixture graph…").tint(TeVartaTheme.oxide) }
-        }
         }
         .padding(24).background(TeVartaTheme.paper.ignoresSafeArea())
         .task { await construct() }
