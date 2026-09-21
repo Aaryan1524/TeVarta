@@ -13,7 +13,14 @@ from alembic import command
 from alembic.config import Config
 from app.auth import PostgresSessionStore
 from app.contracts import FeedbackRequest
+from app.discovery import (
+    DiscoveryCandidate,
+    PostgresSearchBudgetStore,
+    SearchRequest,
+    SearchService,
+)
 from app.entity_resolution import EntityResolver
+from app.operations import SearchBudgetExceeded
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from app.telemetry import PostgresTelemetryStore, UnknownEvent
 from psycopg import sql
@@ -50,6 +57,8 @@ TABLES = {
     "event_claims",
     "usage_records",
     "auth_sessions",
+    "search_query_reservations",
+    "search_budget_alerts",
 }
 
 
@@ -353,7 +362,7 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0002"
+                == "0003_search_budget_reservations"
             )
     finally:
         engine.dispose()
@@ -434,6 +443,63 @@ def test_usage_request_deduplication(db):
             FROM usage_records""")
 
 
+def test_search_budget_is_shared_across_concurrent_workers_and_alerts_once(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    alerts: list[dict[str, object]] = []
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+
+    def reserve(index: int):
+        store = PostgresSearchBudgetStore(dsn, monthly_query_cap=5)
+        reservation = store.reserve(uuid4(), now)
+        if reservation.alert_80_percent:
+            alerts.append({"event": "search_cap_80_percent", "used": reservation.used})
+        return reservation
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(reserve, index) for index in range(8)]
+    reservations = []
+    blocked = 0
+    for future in futures:
+        try:
+            reservations.append(future.result())
+        except SearchBudgetExceeded:
+            blocked += 1
+
+    assert len(reservations) == 5
+    assert blocked == 3
+    assert sum(reservation.alert_80_percent for reservation in reservations) == 1
+    assert alerts == [{"event": "search_cap_80_percent", "used": 4}]
+
+
+def test_search_usage_receipts_track_success_and_blocked_requests(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+
+    class Provider:
+        def search(self, _request):
+            return (
+                DiscoveryCandidate(
+                    "https://example.invalid/result",
+                    "Synthetic result",
+                    None,
+                    "fixture",
+                    now,
+                    "fixture",
+                ),
+            )
+
+    service = SearchService(Provider(), PostgresSearchBudgetStore(dsn, monthly_query_cap=1))
+    service.search(SearchRequest(uuid4(), "Apple", now - timedelta(hours=24), 1), now)
+    with pytest.raises(SearchBudgetExceeded):
+        service.search(SearchRequest(uuid4(), "SanDisk", now - timedelta(hours=24), 1), now)
+
+    with psycopg.connect(dsn) as connection:
+        rows = connection.execute(
+            "SELECT outcome, quantity, query_count FROM usage_records ORDER BY occurred_at"
+        ).fetchall()
+    assert rows == [("success", 1, 1), ("blocked", 0, 0)]
+
+
 def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
     engine = create_engine(database_factory())
     try:
@@ -466,7 +532,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0002"
+                == "0003_search_budget_reservations"
             )
     finally:
         engine.dispose()

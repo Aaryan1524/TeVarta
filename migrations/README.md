@@ -3,7 +3,9 @@
 T05 provides revision `0001`: all 21 frozen §5.1 tables plus `event_claims`
 and `usage_records` for evidence and usage persistence. PostgreSQL 16 and pgvector
 0.8.6 are the tested baseline. The server must have pgvector available; the
-migration enables its `vector` extension. No `create_all` path is used.
+migration enables its `vector` extension. T19 adds revision `0003_search_budget_reservations`:
+one reservation per search request and a per-month alert receipt make the shared hard
+search cap safe across concurrent workers. No `create_all` path is used.
 
 ## Apply or preview
 
