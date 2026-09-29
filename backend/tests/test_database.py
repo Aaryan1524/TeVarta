@@ -1,9 +1,11 @@
 """Run against disposable PostgreSQL databases, never an existing application schema."""
 
 import io
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +15,17 @@ from alembic import command
 from alembic.config import Config
 from app.auth import PostgresSessionStore
 from app.contracts import FeedbackRequest
+from app.curation import (
+    CuratedEntity,
+    EndpointNotResolved,
+    PostgresCurationCatalog,
+    content_sha,
+    parse_curation_file,
+    parse_review_log,
+    plan_curated_load,
+    review_batch,
+)
+from app.curation_draft import DRAFT_COMPONENT, PostgresUsageMeter, TokenPrices
 from app.discovery import (
     DiscoveryCandidate,
     PostgresSearchBudgetStore,
@@ -498,6 +511,123 @@ def test_search_usage_receipts_track_success_and_blocked_requests(migrated_url):
             "SELECT outcome, quantity, query_count FROM usage_records ORDER BY occurred_at"
         ).fetchall()
     assert rows == [("success", 1, 1), ("blocked", 0, 0)]
+
+
+TAIWAN = CuratedEntity("ent_cur_country_taiwan", "Taiwan", "Country", ("Taiwan",))
+
+
+def test_curation_catalog_resolves_strictly_without_logging_misses(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}
+        ),
+    )
+    catalog = PostgresCurationCatalog(db)
+    catalog.upsert_curated_entities([TAIWAN])
+    catalog.upsert_curated_entities([TAIWAN])  # idempotent
+
+    by_ticker = catalog.resolve("AAPL")
+    by_alias = catalog.resolve("Taiwan")
+    by_id = catalog.resolve("ent_cur_country_taiwan")
+
+    assert (by_ticker.entity_id, by_ticker.resolution_quality) == ("ent_sec_0000320193", 1.0)
+    assert (by_alias.entity_id, by_alias.entity_type, by_alias.resolution_quality) == (
+        "ent_cur_country_taiwan", "Country", 0.7
+    )
+    assert by_id.resolution_quality == 1.0
+    with pytest.raises(EndpointNotResolved, match="ambiguous"):
+        catalog.resolve("Apple")  # fixture company, fixture fruit topic, and SEC Apple
+    with pytest.raises(EndpointNotResolved, match="did not resolve"):
+        catalog.resolve("TSMC")
+    with pytest.raises(EndpointNotResolved, match="not a known entity_id"):
+        catalog.resolve("ent_cur_missing")
+    assert db.execute("SELECT count(*) FROM resolution_misses").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT source, is_identifier FROM entity_aliases WHERE entity_id = %s",
+        (TAIWAN.entity_id,),
+    ).fetchall() == [("curated", False)]
+
+
+def test_reviewed_curated_edge_plans_against_the_real_catalog(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}
+        ),
+    )
+    catalog = PostgresCurationCatalog(db)
+    catalog.upsert_curated_entities([TAIWAN])
+    evidence = {
+        "url": "https://www.sec.gov/Archives/edgar/data/320193/aapl-20250927.htm",
+        "source_type": "sec_filing",
+        "publisher_group": "apple",
+    }
+    batch = {
+        "batch_id": "aapl-20260928",
+        "drafted_by": "human",
+        "drafted_at": "2026-09-28T10:00:00+00:00",
+        "usage_request_id": None,
+        "subject": "AAPL",
+        "evidence": [evidence],
+        "proposals": [
+            {
+                "proposal_id": "aapl-20260928-01",
+                "draft": None,
+                "draft_sha": None,
+                "decision": "accept",
+                "reason": None,
+                "edge": {
+                    "source": "AAPL", "relation": "EXPOSED_TO", "target": "Taiwan",
+                    "weight": 0.8, "directness": 1.0,
+                    "rationale": "Filing discloses manufacturing concentration in Taiwan",
+                    "evidence": [evidence], "valid_from": "2025-09-27",
+                    "review_by": "2027-03-28",
+                },
+            }
+        ],
+    }
+    empty = parse_curation_file({"entities": [], "edges": []})
+    outcome = review_batch(batch, empty, parse_review_log([]), "aaryan", date(2026, 9, 28))
+    log = parse_review_log(json.dumps(record.as_json()) for record in outcome.decided)
+
+    [planned] = plan_curated_load(outcome.curation, log, catalog)
+
+    assert planned.revision.from_entity_id == "ent_sec_0000320193"
+    assert planned.revision.to_entity_id == "ent_cur_country_taiwan"
+    # SEC filing (1.0), one publisher group, stated, alias-resolved endpoint (0.7).
+    assert planned.revision.confidence == pytest.approx(0.35 + 0.25 / 3 + 0.25 + 0.105)
+    assert planned.revision.source_ids == (f"curated:{content_sha(outcome.decided[0].edge)}",)
+
+
+def test_curation_draft_meter_records_a_costed_redacted_receipt(database_factory):
+    url = database_factory()
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        command.upgrade(alembic_config(connection), "head")
+    engine.dispose()
+    dsn = url.set(drivername="postgresql").render_as_string(hide_password=False)
+    meter = PostgresUsageMeter(dsn, TokenPrices(Decimal("2"), Decimal("8")))
+    request_id = uuid4()
+
+    meter.check_available()
+    for _ in range(2):  # a retried receipt write never double-counts
+        meter.record(
+            request_id, "success", provider="openai", model="configured-model",
+            input_tokens=500_000, output_tokens=50_000, latency_ms=1234,
+        )
+
+    with psycopg.connect(dsn) as connection:
+        rows = connection.execute(
+            """SELECT component, outcome, quantity, unit, estimated_cost_usd, provider,
+                      model, input_tokens, output_tokens, latency_ms
+               FROM usage_records WHERE request_id = %s""",
+            (request_id,),
+        ).fetchall()
+    assert rows == [
+        (DRAFT_COMPONENT, "success", 1, "call", Decimal("1.4"), "openai", "configured-model",
+         500_000, 50_000, 1234)
+    ]
 
 
 def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
