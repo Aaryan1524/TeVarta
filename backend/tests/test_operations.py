@@ -12,9 +12,10 @@ from app.operations import (
     SearchUsageLedger,
     SensitiveDataRedactionFilter,
     install_log_redaction,
+    install_transport_security,
     scrub_sentry_event,
 )
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 
@@ -143,3 +144,78 @@ def test_usage_report_keeps_components_separate() -> None:
         "embeddings": {"quantity": 12, "estimated_cost_usd": "0.02"},
         "r2": {"quantity": 3, "estimated_cost_usd": "0.01"},
     }
+
+
+PRODUCTION = EnvironmentSettings(
+    "production", "production", "postgresql://db.internal/tevarta", "neo4j://graph.internal",
+    "tevarta-assets",
+)
+PROXY = ("10.0.0.5", 443)
+
+
+def transport_app(settings=PRODUCTION, environ=None):
+    app = FastAPI()
+    install_transport_security(app, settings, environ or {"TEVARTA_TRUSTED_PROXIES": "10.0.0.0/8"})
+
+    @app.get("/whoami")
+    def whoami(request: Request) -> dict[str, str]:
+        return {"scheme": request.url.scheme, "client": request.client.host}
+
+    return app
+
+
+def test_trusted_proxy_https_is_served_with_hsts_and_real_client_ip() -> None:
+    client = TestClient(transport_app(), base_url="http://api.internal", client=PROXY)
+
+    response = client.get(
+        "/whoami",
+        headers={"X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.9"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"scheme": "https", "client": "203.0.113.9"}
+    assert response.headers["strict-transport-security"].startswith("max-age=31536000")
+
+
+def test_plain_http_through_the_proxy_is_redirected_to_https() -> None:
+    client = TestClient(transport_app(), base_url="http://api.internal", client=PROXY)
+
+    response = client.get(
+        "/whoami", headers={"X-Forwarded-Proto": "http"}, follow_redirects=False
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://")
+
+
+def test_untrusted_client_cannot_spoof_https_or_its_address() -> None:
+    client = TestClient(
+        transport_app(), base_url="http://api.internal", client=("198.51.100.7", 5000)
+    )
+
+    response = client.get(
+        "/whoami",
+        headers={"X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.9"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+
+
+def test_wildcard_proxy_trust_is_rejected() -> None:
+    with pytest.raises(EnvironmentConfigurationError, match="spoof"):
+        transport_app(environ={"TEVARTA_TRUSTED_PROXIES": "*"})
+
+
+def test_development_serves_plain_http_without_transport_middleware() -> None:
+    development = EnvironmentSettings(
+        "development", "development", "postgresql://localhost/tevarta_dev",
+        "neo4j://localhost", "tevarta-dev",
+    )
+    client = TestClient(transport_app(development), base_url="http://localhost")
+
+    response = client.get("/whoami", follow_redirects=False)
+
+    assert response.status_code == 200
+    assert "strict-transport-security" not in response.headers
