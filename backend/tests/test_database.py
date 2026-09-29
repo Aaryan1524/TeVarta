@@ -165,6 +165,54 @@ def test_sec_catalog_reimport_is_idempotent_and_keeps_entities_catalog(db):
     assert alias_count == 3
 
 
+def test_multi_class_issuer_resolves_by_every_ticker(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {
+                "0": {"cik_str": 1652044, "ticker": "GOOGL", "title": "Alphabet Inc."},
+                "1": {"cik_str": 1652044, "ticker": "GOOG", "title": "Alphabet Inc."},
+            }
+        ),
+    )
+    resolver = EntityResolver(db)
+
+    assert {resolver.resolve(ticker).entity_id for ticker in ("GOOGL", "GOOG")} == {
+        "ent_sec_0001652044"
+    }
+    assert db.execute(
+        "SELECT ticker FROM entities WHERE entity_id = 'ent_sec_0001652044'"
+    ).fetchone() == ("GOOGL",)
+
+
+def test_reimport_moves_a_reassigned_ticker_without_identifier_collision(db):
+    def payload(*rows):
+        return parse_company_tickers(
+            {str(index): row for index, row in enumerate(rows)}
+        )
+
+    old = {"cik_str": 1111, "ticker": "MOVE", "title": "Old Holder Inc."}
+    new = {"cik_str": 2222, "ticker": "MOVE", "title": "New Holder Inc."}
+    import_sec_catalog(db, payload(old, {"cik_str": 1111, "ticker": "OLDB",
+                                         "title": "Old Holder Inc."}))
+
+    # The old holder vanished from the file; its ticker now belongs to another CIK.
+    import_sec_catalog(db, payload(new))
+    # The old holder is back without that ticker (a class it no longer lists).
+    import_sec_catalog(db, payload(new, {"cik_str": 1111, "ticker": "OLDC",
+                                         "title": "Old Holder Inc."}))
+
+    rows = db.execute(
+        """SELECT alias_norm, entity_id FROM entity_aliases
+           WHERE alias_norm LIKE 'ticker:%' AND entity_id IN
+             ('ent_sec_0000001111', 'ent_sec_0000002222') ORDER BY alias_norm"""
+    ).fetchall()
+    assert rows == [
+        ("ticker:move", "ent_sec_0000002222"),
+        ("ticker:oldc", "ent_sec_0000001111"),
+    ]
+
+
 def test_entity_resolver_logs_unresolved_aliases_without_tagging(db):
     db.execute(
         "INSERT INTO entities (entity_id, canonical_name, type, seed_count) VALUES "
