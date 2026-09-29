@@ -187,6 +187,23 @@ def test_entity_resolver_logs_unresolved_aliases_without_tagging(db):
     assert miss_count == 1
 
 
+def test_article_resolution_ignores_bare_headline_words_but_query_resolves_tickers(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 1090872, "ticker": "A", "title": "Agilent Technologies Inc."}}
+        ),
+    )
+    resolver = EntityResolver(db)
+
+    assert resolver.resolve("A").entity_id == "ent_sec_0001090872"
+    article = resolver.resolve("A", bare_identifiers=False)
+    assert (article.status, article.rung) == ("unresolved", 2)
+    assert resolver.resolve("NYSE: A", bare_identifiers=False).entity_id == (
+        "ent_sec_0001090872"
+    )
+
+
 @pytest.mark.parametrize("table", ["user_seeds", "user_feed", "feedback", "event_articles"])
 def test_duplicate_keys_rejected(db, table):
     with pytest.raises(psycopg.errors.UniqueViolation):
