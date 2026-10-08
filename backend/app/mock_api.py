@@ -39,6 +39,7 @@ from app.contracts import (
     SeedsStatusResponse,
     User,
 )
+from app.onboarding import PostgresOnboardingStore
 from app.telemetry import TelemetryService, UnknownEvent
 
 ERROR_RESPONSES = {
@@ -119,6 +120,15 @@ def require_fixture_user(request: Request, user: User = Depends(authenticated_us
     return user
 
 
+def onboarding_store(request: Request) -> PostgresOnboardingStore | None:
+    if getattr(request.app.state, "auth_service", None) is None:
+        return None
+    store = getattr(request.app.state, "onboarding_store", None)
+    if store is None:
+        raise LiveDataUnavailable
+    return store
+
+
 @router.post("/auth/apple", response_model=AuthResponse, tags=["authentication"])
 def authenticate_with_apple(request: Request, body: AppleAuthRequest) -> dict[str, object]:
     service: SessionService | None = getattr(request.app.state, "auth_service", None)
@@ -188,8 +198,12 @@ def delete_account(_: User = Depends(require_fixture_user)) -> dict[str, object]
 
 @router.get("/entities/search", response_model=EntitySearchResponse, tags=["entities"])
 def search_entities(
-    q: str = Query(min_length=1, max_length=128), _: User = Depends(require_fixture_user)
+    request: Request, q: str = Query(min_length=1, max_length=128),
+    _: User = Depends(authenticated_user),
 ) -> dict[str, object]:
+    store = onboarding_store(request)
+    if store is not None:
+        return store.search(q).model_dump(mode="json")
     if q.casefold() == "apple":
         return fixture("entity_search_ambiguous.json")
     return fixture("entity_search_success.json")
@@ -202,13 +216,19 @@ def search_entities(
     tags=["seeds"],
 )
 def create_seed(
-    _: SeedCreateRequest, __: User = Depends(require_fixture_user)
+    request: Request, body: SeedCreateRequest, user: User = Depends(authenticated_user)
 ) -> dict[str, object]:
+    store = onboarding_store(request)
+    if store is not None:
+        return store.create_seed(user.id, body).model_dump(mode="json")
     return fixture("seed_success.json")
 
 
 @router.get("/seeds/status", response_model=SeedsStatusResponse, tags=["seeds"])
-def seeds_status(_: User = Depends(require_fixture_user)) -> dict[str, object]:
+def seeds_status(request: Request, user: User = Depends(authenticated_user)) -> dict[str, object]:
+    store = onboarding_store(request)
+    if store is not None:
+        return store.status(user.id).model_dump(mode="json")
     return fixture("seeds_status.json")
 
 
@@ -240,18 +260,31 @@ def get_event(event_id: str, _: User = Depends(require_fixture_user)) -> dict[st
 
 
 @router.get("/graph", response_model=GraphResponse, tags=["graph"])
-def get_graph(_: User = Depends(require_fixture_user)) -> dict[str, object]:
+def get_graph(request: Request, user: User = Depends(authenticated_user)) -> dict[str, object]:
+    store = onboarding_store(request)
+    if store is not None:
+        return store.graph(user.id).model_dump(mode="json")
     return fixture("graph.json")
 
 
 @router.get("/entities/{entity_id}", response_model=EntityResponse, tags=["entities"])
-def get_entity(entity_id: str, _: User = Depends(require_fixture_user)) -> dict[str, object]:
+def get_entity(
+    request: Request, entity_id: str, _: User = Depends(authenticated_user)
+) -> dict[str, object]:
+    store = onboarding_store(request)
+    if store is not None:
+        return store.entity(entity_id).model_dump(mode="json")
     del entity_id
     return fixture("entity_success.json")
 
 
 @router.delete("/seeds/{entity_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["seeds"])
-def delete_seed(entity_id: str, _: User = Depends(require_fixture_user)) -> Response:
+def delete_seed(
+    request: Request, entity_id: str, user: User = Depends(authenticated_user)
+) -> Response:
+    store = onboarding_store(request)
+    if store is not None:
+        store.delete_seed(user.id, entity_id)
     del entity_id
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -15,6 +15,7 @@ from app.mock_api import (
     validation_error_handler,
 )
 from app.mock_api import router as mock_router
+from app.onboarding import OnboardingError, PostgresOnboardingStore
 from app.operations import (
     EnvironmentConfigurationError,
     EnvironmentSettings,
@@ -52,6 +53,9 @@ app.state.auth_service = (
     SessionService.from_environ(PostgresSessionStore(settings.postgres_url))
     if len(configured_auth) == len(auth_settings)
     else None
+)
+app.state.onboarding_store = (
+    PostgresOnboardingStore(settings.postgres_url) if app.state.auth_service is not None else None
 )
 app.state.rate_limiter = FixedWindowRateLimiter(limit=10, window_seconds=60)
 app.state.telemetry_service = (
@@ -92,6 +96,11 @@ async def handle_fixture_route_in_live_mode(_: Request, __: LiveDataUnavailable)
     return error_response(
         501, "not_implemented", "This authenticated endpoint is not available yet."
     )
+
+
+@app.exception_handler(OnboardingError)
+async def handle_onboarding_error(_: Request, exc: OnboardingError) -> JSONResponse:
+    return error_response(exc.status, exc.code, exc.message)
 
 
 @app.get("/health", tags=["operations"])
