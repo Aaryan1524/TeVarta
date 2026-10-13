@@ -801,8 +801,9 @@ def t25_publish(dsn, entity, graph):
 
 
 def t25_graph(entity, index=0):
+    # Worker views use the v1 API vocabulary, matching fixtures/v1/graph.json.
     return {"nodes": [{"id": entity, "name": "T25 Company " + str(index),
-                       "entity_type": "Company"}], "edges": []}
+                       "entity_type": "company"}], "edges": []}
 
 
 def test_onboarding_search_retains_ambiguity_and_supports_prefix_and_ticker(onboarding_db):
@@ -819,6 +820,27 @@ def test_onboarding_search_retains_ambiguity_and_supports_prefix_and_ticker(onbo
     assert store.search("NASDAQ:T250").candidates[0].id == entities[0]
     assert store.search("%_").candidates == []
     assert store.search("absententity").candidates == []
+
+
+def test_onboarding_search_skips_types_v1_cannot_represent(onboarding_db):
+    store, dsn, _, entities = onboarding_db
+    topic = "ent_t25topic_" + uuid4().hex
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            """INSERT INTO entities(entity_id, canonical_name, type)
+               VALUES (%s, 'T25 Apple', 'Topic')""",
+            (topic,),
+        )
+        connection.execute(
+            "INSERT INTO entity_aliases VALUES ('t25apple', %s, 'test', 1, false)", (topic,)
+        )
+    try:
+        exact, prefix = store.search("T25 Apple"), store.search("T25")
+        assert {item.id for item in exact.candidates} == set(entities) and exact.ambiguous
+        assert {item.id for item in prefix.candidates} == set(entities)
+    finally:
+        with psycopg.connect(dsn) as connection:
+            connection.execute("DELETE FROM entities WHERE entity_id = %s", (topic,))
 
 
 def test_onboarding_concurrent_seeds_count_once_and_share_durable_work(onboarding_db):
@@ -928,6 +950,47 @@ def test_onboarding_prepared_views_are_scoped_and_ready_requires_live_snapshot(o
     assert store.entity(entities[0]).graph_status == "live"
 
 
+def test_onboarding_overlapping_views_merge_newest_first_with_catalog_roots(onboarding_db):
+    # Per-root views share upstream nodes/edges (two companies both depend on one
+    # supplier) and are republished at different times, so they will disagree.
+    store, dsn, users, entities = onboarding_db
+    shared, upstream = "ent_t25shared_" + uuid4().hex, "ent_t25upstream_" + uuid4().hex
+
+    def view(root, index, shared_name, confidence, root_name=None):
+        return {
+            "nodes": [
+                {"id": root, "name": root_name or "T25 Company " + str(index),
+                 "entity_type": "company"},
+                {"id": shared, "name": shared_name, "entity_type": "company"},
+                {"id": upstream, "name": "Upstream", "entity_type": "company"},
+            ],
+            "edges": [
+                {"source_id": root, "target_id": shared, "relation": "DEPENDS_ON",
+                 "confidence": 0.9},
+                {"source_id": shared, "target_id": upstream, "relation": "DEPENDS_ON",
+                 "confidence": confidence},
+            ],
+        }
+
+    for entity in entities:
+        store.create_seed(users[0], t25_seed(entity))
+    # The older view carries a stale root name, as after a SEC catalog rename.
+    t25_publish(dsn, entities[0], view(entities[0], 0, "Shared", 0.9, "Stale Name"))
+    t25_publish(dsn, entities[1], view(entities[1], 1, "Shared Renamed", 0.8))
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            """UPDATE entity_graph_views SET updated_at = now() - interval '1 day'
+               WHERE entity_id = %s""", (entities[0],),
+        )
+    graph = store.graph(users[0])
+    names = {node.id: node.name for node in graph.nodes}
+    assert names[entities[0]] == "T25 Company 0"
+    assert names[shared] == "Shared Renamed"
+    assert {(e.source_id, e.target_id): e.confidence for e in graph.edges}[
+        (shared, upstream)] == 0.8
+    assert len(graph.nodes) == 4 and len(graph.edges) == 3
+
+
 def test_onboarding_failed_and_corrupt_views_do_not_report_ready(onboarding_db):
     store, dsn, users, entities = onboarding_db
     store.create_seed(users[0], t25_seed(entities[0]))
@@ -949,7 +1012,7 @@ def test_onboarding_api_uses_real_sessions_and_rejects_identity_injection(
 ):
     store, dsn, users, entities = onboarding_db
     class Verifier:
-        def verify(self, token):
+        def verify(self, token, nonce=None):
             return token
     auth = SessionService(
         PostgresSessionStore(dsn), Verifier(), "t" * 32, timedelta(days=30)
