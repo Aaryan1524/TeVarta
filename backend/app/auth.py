@@ -48,7 +48,12 @@ class StoredSession:
 
 
 class AppleIdentityVerifier(Protocol):
-    def verify(self, identity_token: str) -> str: ...
+    def verify(self, identity_token: str, nonce: str | None = None) -> str: ...
+
+
+def apple_nonce_claim(nonce: str) -> str:
+    """The value the client sets as ASAuthorizationAppleIDRequest.nonce: SHA-256 hex."""
+    return hashlib.sha256(nonce.encode()).hexdigest()
 
 
 class SessionStore(Protocol):
@@ -164,13 +169,16 @@ class PostgresSessionStore:
 
 
 class AppleJWTVerifier:
-    def __init__(self, client_id: str, jwks_url: str = APPLE_JWKS_URL) -> None:
+    def __init__(
+        self, client_id: str, jwks_url: str = APPLE_JWKS_URL, require_nonce: bool = False
+    ) -> None:
         if not client_id:
             raise AuthenticationError("TEVARTA_APPLE_CLIENT_ID must be configured")
         self.client_id = client_id
         self.jwks_client = PyJWKClient(jwks_url)
+        self.require_nonce = require_nonce
 
-    def verify(self, identity_token: str) -> str:
+    def verify(self, identity_token: str, nonce: str | None = None) -> str:
         try:
             signing_key = self.jwks_client.get_signing_key_from_jwt(identity_token)
             claims = jwt.decode(
@@ -186,6 +194,16 @@ class AppleJWTVerifier:
         apple_sub = claims.get("sub")
         if not isinstance(apple_sub, str) or not apple_sub:
             raise AuthenticationError("Apple identity token has no valid subject")
+        # Binding the token to a one-time client nonce means an identity token captured
+        # without its raw nonce (logs, another app's flow) cannot be replayed to sign in.
+        if nonce is not None:
+            token_nonce = claims.get("nonce")
+            if not isinstance(token_nonce, str) or not hmac.compare_digest(
+                token_nonce, apple_nonce_claim(nonce)
+            ):
+                raise AuthenticationError("Apple identity token nonce does not match")
+        elif self.require_nonce:
+            raise AuthenticationError("Apple sign-in nonce is required")
         return apple_sub
 
 
@@ -220,13 +238,19 @@ class SessionService:
             raise AuthenticationError(f"missing required auth setting: {exc.args[0]}") from exc
         return cls(
             store=store,
-            apple_verifier=AppleJWTVerifier(values.get("TEVARTA_APPLE_CLIENT_ID", "")),
+            apple_verifier=AppleJWTVerifier(
+                values.get("TEVARTA_APPLE_CLIENT_ID", ""),
+                require_nonce=values.get("TEVARTA_REQUIRE_APPLE_NONCE", "false").casefold()
+                == "true",
+            ),
             signing_key=signing_key,
             refresh_ttl=refresh_ttl,
         )
 
-    def authenticate_apple(self, identity_token: str) -> tuple[str, str, datetime, SessionUser]:
-        apple_sub = self.apple_verifier.verify(identity_token)
+    def authenticate_apple(
+        self, identity_token: str, nonce: str | None = None
+    ) -> tuple[str, str, datetime, SessionUser]:
+        apple_sub = self.apple_verifier.verify(identity_token, nonce=nonce)
         user = self.store.get_or_create_user(apple_sub)
         refresh_token = secrets.token_urlsafe(48)
         session = self.store.create_session(
