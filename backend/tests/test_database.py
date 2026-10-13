@@ -1012,7 +1012,7 @@ def test_onboarding_api_uses_real_sessions_and_rejects_identity_injection(
 ):
     store, dsn, users, entities = onboarding_db
     class Verifier:
-        def verify(self, token):
+        def verify(self, token, nonce=None):
             return token
     auth = SessionService(
         PostgresSessionStore(dsn), Verifier(), "t" * 32, timedelta(days=30)
