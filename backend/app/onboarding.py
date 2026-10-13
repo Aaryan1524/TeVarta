@@ -240,28 +240,27 @@ class PostgresOnboardingStore:
         )
 
     def graph(self, public_id: str) -> GraphResponse:
+        rows = self._views(public_id)
         nodes, edges = {}, {}
-        for row in self._views(public_id):
-            # Roots are known metadata; edges only come from worker-prepared views.
-            root = {
+        # Per-root views overlap (two seeds sharing a supplier) and are republished at
+        # different times, so the most recently published view wins a shared node or edge.
+        ready = sorted(
+            (row for row in rows if row["view_status"] == "ready" and row["status"] == "live"),
+            key=lambda row: (row["updated_at"], row["entity_id"]),
+        )
+        for row in ready:
+            graph = prepared_graph(row["entity_id"], row["graph_json"])
+            nodes.update((node.id, node.model_dump()) for node in graph.nodes)
+            edges.update(
+                ((edge.source_id, edge.relation, edge.target_id), edge.model_dump())
+                for edge in graph.edges
+            )
+        # Roots are the user's own seeds; the catalog row outranks any view's copy.
+        for row in rows:
+            nodes[row["entity_id"]] = {
                 "id": row["entity_id"], "name": row["canonical_name"],
                 "entity_type": api_type(row["type"]),
             }
-            if row["entity_id"] in nodes and nodes[row["entity_id"]] != root:
-                raise OnboardingError(503, "graph_unavailable", "Graph views disagree.")
-            nodes[row["entity_id"]] = root
-            if row["view_status"] != "ready" or row["status"] != "live":
-                continue
-            graph = prepared_graph(row["entity_id"], row["graph_json"])
-            for node in graph.nodes:
-                if node.id in nodes and nodes[node.id] != node.model_dump():
-                    raise OnboardingError(503, "graph_unavailable", "Graph views disagree.")
-                nodes[node.id] = node.model_dump()
-            for edge in graph.edges:
-                key = (edge.source_id, edge.relation, edge.target_id)
-                if key in edges and edges[key] != edge.model_dump():
-                    raise OnboardingError(503, "graph_unavailable", "Graph views disagree.")
-                edges[key] = edge.model_dump()
         return GraphResponse(
             nodes=[nodes[key] for key in sorted(nodes)],
             edges=[edges[key] for key in sorted(edges)],
