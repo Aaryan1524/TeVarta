@@ -83,3 +83,27 @@ def test_article_text_never_treats_bare_words_or_numbers_as_identifiers(surface:
 )
 def test_article_text_accepts_explicit_identifier_syntax(surface: str, expected: str) -> None:
     assert alias_key(surface, bare=False) == (expected, 1)
+
+
+@pytest.mark.parametrize(
+    "surface", ["U.S", "A.I", "U.N", "e.g", "Co/LP", "abc.to", "ABC.XYZ", "ABC-TW"]
+)
+def test_article_text_rejects_abbreviations_and_unknown_suffixes(surface: str) -> None:
+    key, rung = alias_key(surface, bare=False)
+
+    assert rung == 2
+    assert not key.startswith(("ticker:", "cik:"))
+
+
+@pytest.mark.parametrize(
+    ("surface", "expected"),
+    [("2330.TW", "ticker:2330"), ("AAPL.O", "ticker:aapl"), ("VOD.L", "ticker:vod"),
+     ("7203.T", "ticker:7203")],
+)
+def test_article_text_accepts_known_exchange_suffixes(surface: str, expected: str) -> None:
+    assert alias_key(surface, bare=False) == (expected, 1)
+
+
+def test_identifier_queries_do_not_read_abbreviations_as_tickers() -> None:
+    assert alias_key("U.S") == ("us", 2)
+    assert alias_key("brk.b") == ("ticker:brk-b", 1)
