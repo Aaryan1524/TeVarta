@@ -3,10 +3,40 @@ name: iOS
 on:
   pull_request:
   push:
-    branches: [main, Aaditya]
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR supersedes its running build; main keeps every run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
+  # macOS minutes bill at 10x Linux, so the build runs only when iOS inputs change.
+  # The filter is a job, not `on.paths`: a skipped job still reports and satisfies
+  # a required check, while a workflow filtered out by `paths` never reports.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.diff.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: ./scripts/ios_ci_changes.sh "$EVENT" "$BASE" "$HEAD" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7

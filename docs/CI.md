@@ -4,7 +4,11 @@ The repository supplies three required CI workflows:
 
 - **Backend contract:** lint, fixture/model validation, mock smoke tests, and a
   generated-OpenAPI drift check.
-- **iOS:** shared-fixture Swift decoding and a simulator app build.
+- **iOS:** shared-fixture Swift decoding and a simulator app build. macOS minutes
+  bill at 10x Linux, so `scripts/ios_ci_changes.sh` skips the build unless `ios/`,
+  `fixtures/v1/`, `contracts/v1/`, `Makefile`, or the workflow changed. The skip is
+  job-level, so `iOS / build` reports "skipped" and still satisfies a required check.
+  Run it manually from the Actions tab (`workflow_dispatch`) to force a build.
 - **Database:** Alembic migrations and every PostgreSQL integration test
   (`make database-test`) against a disposable pgvector service.
 - **Graph:** every `neo4j`-marked test (`make graph-test`) against a disposable
