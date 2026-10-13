@@ -137,9 +137,20 @@ class SensitiveDataRedactionFilter(logging.Filter):
     """Redact message text and structured extras before any configured handler sees them."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        record.msg = redact_value(message)
-        record.args = ()
+        redacted = redact_value(record.getMessage())
+        msg, args = redact_value(record.msg), redact_value(record.args)
+        try:
+            rendered = str(msg) % args if args else str(msg)
+        except (TypeError, ValueError, KeyError):
+            rendered = None
+        # Keep the template and arguments when redacting them separately renders exactly
+        # the whole-message redaction: uvicorn's access formatter unpacks record.args.
+        # A secret split across template and argument ("access_token=%s") differs, so
+        # it falls back to the flattened, fully redacted message.
+        if rendered == redacted:
+            record.msg, record.args = msg, args
+        else:
+            record.msg, record.args = redacted, ()
         for key, value in tuple(record.__dict__.items()):
             if key not in {"msg", "args"}:
                 record.__dict__[key] = redact_value(value, key)

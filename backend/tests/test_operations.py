@@ -72,6 +72,33 @@ def test_log_filter_redacts_quoted_credentials_and_formatted_arguments() -> None
     assert "synthetic" not in signing_key.getMessage()
 
 
+def test_log_filter_keeps_uvicorn_access_arguments_formattable() -> None:
+    from uvicorn.logging import AccessFormatter
+
+    record = logging.LogRecord(
+        "uvicorn.access", 20, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:5000", "GET", "/v1/feed?access_token=synthetic-token", "1.1", 200), None,
+    )
+
+    SensitiveDataRedactionFilter().filter(record)
+    line = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s').format(record)
+
+    assert "synthetic-token" not in line
+    assert line.startswith('127.0.0.1:5000 - "GET /v1/feed?access_token=[REDACTED] HTTP/1.1" 200')
+
+
+def test_log_filter_flattens_a_secret_split_across_template_and_argument() -> None:
+    record = logging.LogRecord(
+        "test", 20, __file__, 1, "access_token=%s Authorization: Bearer %s",
+        ("synthetic-a", "synthetic-b"), None,
+    )
+
+    SensitiveDataRedactionFilter().filter(record)
+
+    assert record.args == ()
+    assert "synthetic" not in record.getMessage()
+
+
 def test_installed_log_redaction_removes_values_from_emitted_output() -> None:
     stream = StringIO()
     handler = logging.StreamHandler(stream)
