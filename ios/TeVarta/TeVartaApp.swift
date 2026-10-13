@@ -227,18 +227,30 @@ private final class AuthenticationViewModel: ObservableObject {
     }
 }
 
+/// Debug-only route into the fixture shells. Simulator builds are unsigned and Debug
+/// points at the local http mock, so Sign in with Apple cannot complete there.
+/// Release builds compile this path out.
+private enum FixturePreview {
+    #if DEBUG
+    static let requestedAtLaunch = ProcessInfo.processInfo.arguments.contains("-TeVartaFixturePreview")
+    #else
+    static let requestedAtLaunch = false
+    #endif
+}
+
 @main
 struct TeVartaApp: App {
     @StateObject private var authentication = AuthenticationViewModel()
+    @State private var previewingFixtures = FixturePreview.requestedAtLaunch
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if authentication.session != nil {
+                if authentication.session != nil || previewingFixtures {
                     TeVartaRootView()
                 } else {
                     NavigationStack {
-                        ContentView(authentication: authentication)
+                        ContentView(authentication: authentication) { previewingFixtures = true }
                     }
                 }
             }
@@ -249,6 +261,7 @@ struct TeVartaApp: App {
 
 private struct ContentView: View {
     @ObservedObject var authentication: AuthenticationViewModel
+    let previewFixtures: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -279,6 +292,10 @@ private struct ContentView: View {
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 50)
                 .disabled(authentication.isWorking)
+                #if DEBUG
+                Button("Preview with fixtures") { previewFixtures() }
+                    .font(.footnote)
+                #endif
             }
             if let errorMessage = authentication.errorMessage {
                 Text(errorMessage)
@@ -632,20 +649,22 @@ private struct GraphView: View {
     var focus: [String] = []
     var body: some View {
         ScrollView {
-            if let graph = store.graph {
+            if let graph = store.graph, graph.nodes.isEmpty {
+                VStack(spacing: 14) {
+                    Text("YOUR WORLD IS EMPTY").tevartaLabel()
+                    Text("Add a company, place, or system to start mapping its connections.")
+                        .multilineTextAlignment(.center).foregroundStyle(TeVartaTheme.muted)
+                }.frame(maxWidth: .infinity).padding(24)
+            } else if let graph = store.graph {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 6) { Text("YOUR WORLD").tevartaLabel(); Text("The connections behind what matters.").font(.system(.title, design: .serif, weight: .bold)) }
                     GraphDiagram(graph: graph, focus: focus)
                     VStack(alignment: .leading, spacing: 0) {
                         Text("ENTITIES").tevartaLabel().padding(.bottom, 8)
                         ForEach(graph.nodes) { node in
-                            if node.id == "ent_tsla" {
-                                NavigationLink { EntityDetailView(entityID: node.id, displayName: node.name, store: store) } label: {
-                                    entityRow(node, navigable: true)
-                                }.buttonStyle(.plain)
-                            } else {
-                                entityRow(node, navigable: false)
-                            }
+                            NavigationLink { EntityDetailView(entityID: node.id, displayName: node.name, store: store) } label: {
+                                entityRow(node)
+                            }.buttonStyle(.plain)
                             Divider()
                         }
                     }
@@ -656,14 +675,14 @@ private struct GraphView: View {
         .background(TeVartaTheme.paper.ignoresSafeArea()).navigationTitle("Your world").task { await store.loadGraph() }
     }
 
-    private func entityRow(_ node: GraphNode, navigable: Bool) -> some View {
+    private func entityRow(_ node: GraphNode) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(node.name).font(.headline)
                 Text(node.entityType.uppercased()).tevartaLabel(color: TeVartaTheme.muted)
             }
             Spacer()
-            if navigable { Image(systemName: "chevron.right").foregroundStyle(TeVartaTheme.muted) }
+            Image(systemName: "chevron.right").foregroundStyle(TeVartaTheme.muted)
         }
         .padding(.vertical, 14)
     }
