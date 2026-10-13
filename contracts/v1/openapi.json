@@ -34,6 +34,19 @@
             "minLength": 1,
             "title": "Identity Token",
             "type": "string"
+          },
+          "nonce": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nonce"
           }
         },
         "required": [

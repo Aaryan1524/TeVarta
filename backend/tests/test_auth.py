@@ -12,6 +12,7 @@ from app.auth import (
     SessionService,
     SessionUser,
     StoredSession,
+    apple_nonce_claim,
 )
 from app.main import app
 from app.operations import FixedWindowRateLimiter, RateLimitExceeded
@@ -26,7 +27,7 @@ class FakeAppleVerifier:
     def __init__(self, apple_sub: str = "apple-sub") -> None:
         self.apple_sub = apple_sub
 
-    def verify(self, _: str) -> str:
+    def verify(self, _: str, nonce: str | None = None) -> str:
         return self.apple_sub
 
 
@@ -92,7 +93,7 @@ class MultiUserStore(MemoryStore):
 
 
 class TokenMappedAppleVerifier:
-    def verify(self, identity_token: str) -> str:
+    def verify(self, identity_token: str, nonce: str | None = None) -> str:
         return {"alice-token": "apple-sub-a", "bob-token": "apple-sub-b"}[identity_token]
 
 
@@ -276,3 +277,61 @@ def test_rate_limiter_rejects_the_request_after_its_allowance() -> None:
     limiter.check("auth:127.0.0.1", now=11)
     with pytest.raises(RateLimitExceeded):
         limiter.check("auth:127.0.0.1", now=12)
+
+
+NONCE = "client-generated-nonce-0123456789"
+
+
+def test_apple_verifier_accepts_a_token_bound_to_the_client_nonce() -> None:
+    apple_verifier, private_key = verifier()
+
+    token = apple_token(private_key, nonce=apple_nonce_claim(NONCE))
+
+    assert apple_verifier.verify(token, nonce=NONCE)
+
+
+@pytest.mark.parametrize(
+    "claims", [{"nonce": apple_nonce_claim("a-different-nonce-value")}, {"nonce": NONCE}, {}]
+)
+def test_apple_verifier_rejects_a_missing_raw_or_mismatched_nonce(
+    claims: dict[str, object],
+) -> None:
+    apple_verifier, private_key = verifier()
+
+    with pytest.raises(AuthenticationError, match="nonce"):
+        apple_verifier.verify(apple_token(private_key, **claims), nonce=NONCE)
+
+
+def test_required_nonce_rejects_sign_in_without_one() -> None:
+    apple_verifier, private_key = verifier()
+    apple_verifier.require_nonce = True
+
+    with pytest.raises(AuthenticationError, match="nonce is required"):
+        apple_verifier.verify(apple_token(private_key))
+    assert apple_verifier.verify(
+        apple_token(private_key, nonce=apple_nonce_claim(NONCE)), nonce=NONCE
+    )
+
+
+def test_sign_in_route_passes_the_nonce_to_verification() -> None:
+    class RecordingVerifier(FakeAppleVerifier):
+        nonces: list[str | None] = []
+
+        def verify(self, _: str, nonce: str | None = None) -> str:
+            self.nonces.append(nonce)
+            return self.apple_sub
+
+    verifier_ = RecordingVerifier()
+    auth = SessionService(MemoryStore(), verifier_, SIGNING_KEY, timedelta(days=30),
+                          now=lambda: NOW)
+    previous = app.state.auth_service
+    app.state.auth_service = auth
+    try:
+        response = TestClient(app).post(
+            "/v1/auth/apple", json={"identity_token": "verified-token", "nonce": NONCE}
+        )
+    finally:
+        app.state.auth_service = previous
+
+    assert response.status_code == 200
+    assert verifier_.nonces == [NONCE]

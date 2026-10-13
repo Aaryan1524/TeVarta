@@ -125,7 +125,9 @@ def authenticate_with_apple(request: Request, body: AppleAuthRequest) -> dict[st
     if service is None:
         return fixture("auth_success.json")
     _rate_limit(request, "auth")
-    access_token, refresh_token, expires_at, user = service.authenticate_apple(body.identity_token)
+    access_token, refresh_token, expires_at, user = service.authenticate_apple(
+        body.identity_token, nonce=body.nonce
+    )
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
