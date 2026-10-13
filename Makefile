@@ -18,6 +18,13 @@ database-test:
 	@test -n "$$TEVARTA_TEST_POSTGRES_URL" || (echo "Set TEVARTA_TEST_POSTGRES_URL"; exit 1)
 	$(PYTHON) -m pytest backend/tests/test_database.py
 
+.PHONY: graph-test
+# With a URI set, Neo4j fixtures connect or error; they never skip. Pytest exits
+# non-zero if no neo4j-marked test is collected.
+graph-test:
+	@test -n "$$TEVARTA_TEST_NEO4J_URI" || (echo "Set TEVARTA_TEST_NEO4J_URI"; exit 1)
+	$(PYTHON) -m pytest -m neo4j -rs
+
 database-upgrade:
 	$(PYTHON) -m alembic upgrade head
 

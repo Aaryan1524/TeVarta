@@ -1,0 +1,37 @@
+name: Graph
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  neo4j:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        # 5.26 is the Neo4j 5 LTS line supported by the pinned neo4j driver (<6).
+        image: neo4j:5.26-community
+        env:
+          NEO4J_AUTH: neo4j/ci-graph-password
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p ci-graph-password 'RETURN 1'"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 24
+    env:
+      # Disposable CI-only credential for the throwaway service container.
+      TEVARTA_TEST_NEO4J_URI: bolt://localhost:7687
+      TEVARTA_TEST_NEO4J_PASSWORD: ci-graph-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: make graph-test PYTHON=python
