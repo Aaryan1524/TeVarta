@@ -9,12 +9,14 @@ from app.discovery import (
     FeedPoller,
     SearchRequest,
     SourceConfig,
+    declared_user_agent,
     entity_sweep,
     load_sources,
 )
 from app.operations import SearchBudgetExceeded
 
 NOW = datetime(2026, 9, 20, 12, tzinfo=UTC)
+AGENT = "TeVarta/1.0 (ops@tevarta.test)"
 
 
 def source(mode="rss", active=True):
@@ -40,7 +42,10 @@ RSS = (
 
 def test_feed_polling_emits_the_contract_candidate_shape_without_fetching_bodies():
     calls = []
-    poller = FeedPoller(lambda url, headers: calls.append((url, headers)) or RSS, now=lambda: NOW)
+    poller = FeedPoller(
+        lambda url, headers: calls.append((url, headers)) or RSS, now=lambda: NOW,
+        user_agent=AGENT,
+    )
 
     candidates = poller.poll_active((source(),))
 
@@ -56,6 +61,7 @@ def test_feed_polling_emits_the_contract_candidate_shape_without_fetching_bodies
     )
     assert calls[0][0] == "https://example.invalid/feed"
     assert "application/rss+xml" in calls[0][1]["Accept"]
+    assert calls[0][1]["User-Agent"] == AGENT
 
 
 def test_inactive_sources_never_make_network_requests():
@@ -82,9 +88,41 @@ def test_feed_failure_does_not_discard_candidates_from_other_sources():
             raise OSError("fixture network failure")
         return RSS
 
-    candidates = FeedPoller(fetcher, now=lambda: NOW).poll_active((working, broken))
+    candidates = FeedPoller(fetcher, now=lambda: NOW, user_agent=AGENT).poll_active(
+        (working, broken)
+    )
 
     assert [candidate.source_hint for candidate in candidates] == [working.id]
+
+
+def test_active_source_is_never_fetched_without_a_declared_user_agent():
+    poller = FeedPoller(lambda _url, _headers: pytest.fail("undeclared client fetched"))
+
+    with pytest.raises(DiscoveryConfigurationError, match="declared User-Agent"):
+        poller.poll(source())
+    assert poller.poll_active((source(),)) == ()
+
+
+@pytest.mark.parametrize(
+    "contact", ["", "TeVarta", "ops at tevarta.com", "@tevarta.com", "ops@localhost"]
+)
+def test_declared_user_agent_requires_an_operations_email(contact):
+    with pytest.raises(DiscoveryConfigurationError, match="TEVARTA_HTTP_CONTACT"):
+        declared_user_agent({"TEVARTA_HTTP_CONTACT": contact})
+
+
+def test_declared_user_agent_names_the_client_and_contact():
+    agent = declared_user_agent({"TEVARTA_HTTP_CONTACT": " ops@tevarta.com "})
+
+    assert agent == "TeVarta/1.0 (ops@tevarta.com)"
+
+
+def test_poll_task_without_active_sources_needs_no_contact(monkeypatch):
+    from app.discovery import poll_sources
+
+    monkeypatch.delenv("TEVARTA_HTTP_CONTACT", raising=False)
+
+    assert poll_sources.run() == 0
 
 
 def test_source_registry_keeps_every_source_disabled_until_t19_rights_review():
@@ -193,3 +231,21 @@ def test_worker_schedule_has_five_minute_poll_and_daily_sweep():
     assert worker_settings.beat_schedule["poll-sources-every-five-minutes"]["schedule"] == 300.0
     assert worker_settings.beat_schedule["entity-sweep-daily"]["schedule"] == 86400.0
     assert entity_sweep.name == "app.discovery.entity_sweep"
+
+
+def test_poll_task_with_active_sources_fails_closed_without_contact(monkeypatch, tmp_path):
+    from app.discovery import poll_sources
+
+    config = tmp_path / "sources.yaml"
+    config.write_text(
+        "sources:\n"
+        "  - {id: fixture_source, domain: example.invalid, "
+        "feed_url: 'https://example.invalid/feed', publisher_group: fixture, "
+        "tier_value: 1.0, reliability: 0.99, poll_interval_s: 300, active: true, "
+        "ingestion_mode: rss}\n"
+    )
+    monkeypatch.setenv("TEVARTA_SOURCES_CONFIG", str(config))
+    monkeypatch.delenv("TEVARTA_HTTP_CONTACT", raising=False)
+
+    with pytest.raises(DiscoveryConfigurationError, match="TEVARTA_HTTP_CONTACT"):
+        poll_sources.run()
