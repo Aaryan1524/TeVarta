@@ -13,8 +13,8 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.auth import PostgresSessionStore
-from app.contracts import FeedbackRequest
+from app.auth import PostgresSessionStore, SessionService
+from app.contracts import FeedbackRequest, SeedCreateRequest
 from app.curation import (
     CuratedEntity,
     EndpointNotResolved,
@@ -33,10 +33,14 @@ from app.discovery import (
     SearchService,
 )
 from app.entity_resolution import EntityResolver
-from app.operations import SearchBudgetExceeded
+from app.main import app
+from app.onboarding import OnboardingError, PostgresOnboardingStore
+from app.operations import FixedWindowRateLimiter, SearchBudgetExceeded
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from app.telemetry import PostgresTelemetryStore, UnknownEvent
+from fastapi.testclient import TestClient
 from psycopg import sql
+from psycopg.types.json import Jsonb
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 
@@ -72,6 +76,8 @@ TABLES = {
     "auth_sessions",
     "search_query_reservations",
     "search_budget_alerts",
+    "entity_expansion_requests",
+    "entity_graph_views",
 }
 
 
@@ -440,7 +446,7 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0003_search_budget_reservations"
+                == "0004_onboarding_handoff"
             )
     finally:
         engine.dispose()
@@ -727,7 +733,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0003_search_budget_reservations"
+                == "0004_onboarding_handoff"
             )
     finally:
         engine.dispose()
@@ -747,3 +753,257 @@ def test_missing_target_fails_without_connecting(monkeypatch):
     monkeypatch.delenv("TEVARTA_POSTGRES_URL", raising=False)
     with pytest.raises(RuntimeError, match="explicitly"):
         command.upgrade(alembic_config(), "head")
+
+
+@pytest.fixture
+def onboarding_db(migrated_url):
+    """Committed isolated identities; store calls intentionally use separate connections."""
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    suffix = uuid4().hex
+    users = ["usr_t25a_" + suffix, "usr_t25b_" + suffix]
+    entities = ["ent_t25a_" + suffix, "ent_t25b_" + suffix]
+    with psycopg.connect(dsn) as connection:
+        for user in users:
+            connection.execute(
+                "INSERT INTO users(public_id, apple_sub) VALUES (%s, %s)", (user, user)
+            )
+        for index, entity in enumerate(entities):
+            connection.execute(
+                """INSERT INTO entities(entity_id, canonical_name, type, ticker)
+                   VALUES (%s, %s, 'Company', %s)""",
+                (entity, "T25 Company " + str(index), "T25" + str(index)),
+            )
+            connection.execute(
+                """INSERT INTO entity_aliases VALUES (%s, %s, 'test', 1, false),
+                   (%s, %s, 'test', 1, true)""",
+                ("t25apple", entity, "ticker:t25" + str(index), entity),
+            )
+    yield PostgresOnboardingStore(dsn), dsn, users, entities
+    with psycopg.connect(dsn) as connection:
+        connection.execute("DELETE FROM users WHERE public_id = ANY(%s)", (users,))
+        connection.execute("DELETE FROM entities WHERE entity_id = ANY(%s)", (entities,))
+
+
+def t25_seed(entity):
+    return SeedCreateRequest(entity_id=entity, weight=0.8, source="manual")
+
+
+def t25_publish(dsn, entity, graph):
+    # Simulate T23's atomic completion; no graph traversal belongs in T25.
+    with psycopg.connect(dsn) as connection:
+        connection.execute("UPDATE entities SET status = 'live' WHERE entity_id = %s", (entity,))
+        connection.execute(
+            """INSERT INTO entity_graph_views(entity_id, status, graph_json)
+               VALUES (%s, 'ready', %s) ON CONFLICT (entity_id)
+               DO UPDATE SET status = 'ready', graph_json = EXCLUDED.graph_json""",
+            (entity, Jsonb(graph)),
+        )
+
+
+def t25_graph(entity, index=0):
+    return {"nodes": [{"id": entity, "name": "T25 Company " + str(index),
+                       "entity_type": "Company"}], "edges": []}
+
+
+def test_onboarding_search_retains_ambiguity_and_supports_prefix_and_ticker(onboarding_db):
+    store, dsn, _, entities = onboarding_db
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            "UPDATE entities SET seed_count = 10 WHERE entity_id = %s", (entities[0],)
+        )
+    result = store.search("T25 Apple")
+    assert result.ambiguous
+    assert {item.id for item in result.candidates} == set(entities)
+    assert store.search("T25").ambiguous is False
+    assert len(store.search("T25").candidates) == 2
+    assert store.search("NASDAQ:T250").candidates[0].id == entities[0]
+    assert store.search("%_").candidates == []
+    assert store.search("absententity").candidates == []
+
+
+def test_onboarding_concurrent_seeds_count_once_and_share_durable_work(onboarding_db):
+    store, dsn, users, entities = onboarding_db
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(
+            lambda index: store.create_seed(users[index % 2], t25_seed(entities[0])), range(24)
+        ))
+    assert sum(result.created for result in results) == 2
+    with psycopg.connect(dsn) as connection:
+        assert connection.execute(
+            "SELECT seed_count, status FROM entities WHERE entity_id = %s", (entities[0],)
+        ).fetchone() == (2, "catalog")
+        assert connection.execute(
+            "SELECT count(*) FROM entity_expansion_requests WHERE entity_id = %s", (entities[0],)
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT count(*) FROM feedback f JOIN users u ON u.id = f.user_id "
+            "WHERE u.public_id = ANY(%s) AND action = 'seed_added'", (users,)
+        ).fetchone()[0] == 2
+    # Persisted work/status survives constructing a fresh API adapter.
+    assert PostgresOnboardingStore(dsn).status(users[0]).status == "building"
+    assert store.entity(entities[0]).graph_status == "building"
+    retry = store.create_seed(users[0], SeedCreateRequest(
+        entity_id=entities[0], weight=0.1, source="broker"
+    ))
+    assert not retry.created and retry.seed.weight == 0.8 and retry.seed.source == "manual"
+
+
+def test_onboarding_delete_is_idempotent_and_never_removes_other_users_seed(onboarding_db):
+    store, dsn, users, entities = onboarding_db
+    for user in users:
+        store.create_seed(user, t25_seed(entities[0]))
+    for _ in range(3):
+        store.delete_seed(users[0], entities[0])
+    assert store.graph(users[0]).nodes == []
+    assert store.status(users[0]).status == "not_started"
+    assert store.graph(users[1]).nodes[0].id == entities[0]
+    with psycopg.connect(dsn) as connection:
+        assert connection.execute(
+            "SELECT seed_count FROM entities WHERE entity_id = %s", (entities[0],)
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT 1 FROM entity_expansion_requests WHERE entity_id = %s", (entities[0],)
+        ).fetchone()
+        assert connection.execute(
+            "SELECT count(*) FROM feedback f JOIN users u ON u.id=f.user_id "
+            "WHERE u.public_id = %s AND action='seed_removed'", (users[0],)
+        ).fetchone()[0] == 1
+
+
+def test_onboarding_add_delete_race_preserves_exact_seed_count(onboarding_db):
+    store, dsn, users, entities = onboarding_db
+    def mutate(index):
+        user = users[index % 2]
+        if index % 3:
+            store.create_seed(user, t25_seed(entities[0]))
+        else:
+            store.delete_seed(user, entities[0])
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(mutate, range(30)))
+    with psycopg.connect(dsn) as connection:
+        count = connection.execute(
+            "SELECT count(*) FROM user_seeds WHERE entity_id = %s", (entities[0],)
+        ).fetchone()[0]
+        assert connection.execute(
+            "SELECT seed_count FROM entities WHERE entity_id = %s", (entities[0],)
+        ).fetchone()[0] == count
+
+
+def test_onboarding_transaction_rolls_back_seed_count_work_and_telemetry(
+    onboarding_db, monkeypatch
+):
+    store, dsn, users, entities = onboarding_db
+    def broken_record(*_):
+        raise RuntimeError("injected receipt failure")
+    monkeypatch.setattr(store, "_record_mutation", broken_record)
+    with pytest.raises(RuntimeError, match="receipt failure"):
+        store.create_seed(users[0], t25_seed(entities[0]))
+    with psycopg.connect(dsn) as connection:
+        assert connection.execute(
+            "SELECT seed_count FROM entities WHERE entity_id = %s", (entities[0],)
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT 1 FROM user_seeds WHERE entity_id = %s", (entities[0],)
+        ).fetchone() is None
+        assert connection.execute(
+            "SELECT 1 FROM entity_expansion_requests WHERE entity_id = %s", (entities[0],)
+        ).fetchone() is None
+
+
+def test_onboarding_prepared_views_are_scoped_and_ready_requires_live_snapshot(onboarding_db):
+    store, dsn, users, entities = onboarding_db
+    for user, entity in zip(users, entities, strict=True):
+        store.create_seed(user, t25_seed(entity))
+    assert store.status(users[0]).status == "building"
+    t25_publish(dsn, entities[0], t25_graph(entities[0]))
+    assert store.status(users[0]).status == "ready"
+    assert store.status(users[1]).status == "building"
+    assert store.graph(users[0]).model_dump() == t25_graph(entities[0])
+    assert store.graph(users[1]).model_dump() == t25_graph(entities[1], 1)
+    # Already prepared shared graphs require no new expansion request for user B.
+    store.create_seed(users[1], t25_seed(entities[0]))
+    assert len(store.graph(users[1]).nodes) == 2
+    store.delete_seed(users[0], entities[0])
+    assert store.graph(users[0]).nodes == []
+    assert store.entity(entities[0]).graph_status == "live"
+
+
+def test_onboarding_failed_and_corrupt_views_do_not_report_ready(onboarding_db):
+    store, dsn, users, entities = onboarding_db
+    store.create_seed(users[0], t25_seed(entities[0]))
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            "INSERT INTO entity_graph_views(entity_id, status) VALUES (%s, 'failed')",
+            (entities[0],),
+        )
+    assert store.status(users[0]).status == "failed"
+    t25_publish(dsn, entities[0], {"nodes": [], "edges": []})
+    for read in (store.graph, store.status):
+        with pytest.raises(OnboardingError) as error:
+            read(users[0])
+        assert error.value.status == 503
+
+
+def test_onboarding_api_uses_real_sessions_and_rejects_identity_injection(
+    onboarding_db, monkeypatch
+):
+    store, dsn, users, entities = onboarding_db
+    class Verifier:
+        def verify(self, token):
+            return token
+    auth = SessionService(
+        PostgresSessionStore(dsn), Verifier(), "t" * 32, timedelta(days=30)
+    )
+    monkeypatch.setattr(app.state, "auth_service", auth)
+    monkeypatch.setattr(app.state, "onboarding_store", store)
+    monkeypatch.setattr(app.state, "rate_limiter", FixedWindowRateLimiter(100, 60))
+    client = TestClient(app)
+    headers = []
+    for user in users:
+        result = client.post("/v1/auth/apple", json={"identity_token": user})
+        assert result.status_code == 200
+        headers.append({"Authorization": "Bearer " + result.json()["access_token"]})
+    for method, path, body in [
+        ("GET", "/v1/entities/search?q=T25", None),
+        ("GET", "/v1/seeds/status", None), ("GET", "/v1/graph", None),
+        ("GET", "/v1/entities/" + entities[0], None),
+        ("POST", "/v1/seeds", t25_seed(entities[0]).model_dump()),
+        ("DELETE", "/v1/seeds/" + entities[0], None),
+    ]:
+        assert client.request(method, path, json=body).status_code == 401
+        assert client.request(method, path, json=body,
+                              headers={"Authorization": "Bearer fixture-access-token"}
+                              ).status_code == 401
+    body = t25_seed(entities[0]).model_dump()
+    assert client.post("/v1/seeds", headers=headers[0], json=body | {
+        "user_id": users[1]
+    }).status_code == 422
+    first = client.post("/v1/seeds", headers=headers[0], json=body)
+    assert first.status_code == 201 and first.json()["created"]
+    assert not client.post("/v1/seeds", headers=headers[0], json=body).json()["created"]
+    assert client.get("/v1/graph", headers=headers[1]).json() == {"nodes": [], "edges": []}
+    assert client.delete("/v1/seeds/" + entities[0], headers=headers[1]).status_code == 204
+    assert client.get("/v1/graph", headers=headers[0]).json()["nodes"][0]["id"] == entities[0]
+    assert client.get("/v1/entities/ent_missing", headers=headers[0]).status_code == 404
+    assert client.get("/v1/entities/search?q=T25Apple", headers=headers[0]).json()["ambiguous"]
+    assert client.post("/v1/auth/sign-out", headers=headers[0]).status_code == 204
+    assert client.get("/v1/graph", headers=headers[0]).status_code == 401
+
+
+def test_onboarding_migration_roundtrip(database_factory):
+    url = database_factory()
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.upgrade(config, "head")
+            command.downgrade(config, "0003_search_budget_reservations")
+            assert connection.exec_driver_sql(
+                "SELECT to_regclass('entity_expansion_requests')"
+            ).scalar() is None
+            command.upgrade(config, "head")
+            assert connection.exec_driver_sql(
+                "SELECT to_regclass('entity_graph_views')"
+            ).scalar() == "entity_graph_views"
+    finally:
+        engine.dispose()
