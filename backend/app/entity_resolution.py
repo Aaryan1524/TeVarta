@@ -32,13 +32,20 @@ EXCHANGE_PREFIXES = frozenset(
     {"NYSE", "NASDAQ", "NYSEARCA", "NYSEAMERICAN", "AMEX", "OTC", "OTCMKTS", "CBOE", "BATS",
      "TSX", "TSXV", "LSE", "HKEX", "TWSE", "TPE", "KRX", "SGX", "ASX", "XETRA", "EURONEXT"}
 )
+# Venue suffixes as feeds write them (2330.TW, VOD.L, AAPL.O). An unknown suffix is
+# not evidence of a listing: "U.S" or "e.g" must never become a ticker.
+EXCHANGE_SUFFIXES = frozenset(
+    {"TW", "TWO", "T", "HK", "L", "PA", "DE", "F", "AS", "SW", "TO", "V", "AX", "KS", "KQ",
+     "SS", "SZ", "NS", "BO", "SI", "MI", "MC", "ST", "OL", "CO", "HE", "BR", "LS", "SA", "MX",
+     "O", "OQ", "N"}
+)
 # SEC writes share classes with a hyphen (BRK-B); news writes BRK.B or BRK/B.
 SHARE_CLASSES = frozenset("ABC")
 _CIK = re.compile(r"(cik\s*[:#-]?\s*)?(\d{1,10})", flags=re.IGNORECASE)
 _SYMBOL = re.compile(
     r"(?:(?P<cashtag>\$)|(?P<exchange>[A-Za-z]+)\s*:\s*)?"
     r"(?P<symbol>[A-Za-z0-9]{1,10})"
-    r"(?:[.\-/](?P<suffix>[A-Za-z]{1,4}))?"
+    r"(?:(?P<separator>[.\-/])(?P<suffix>[A-Za-z]{1,4}))?"
 )
 
 
@@ -60,15 +67,26 @@ def identifier_alias(surface: str, *, bare: bool = True) -> str | None:
     exchange = match.group("exchange")
     if exchange and exchange.upper() not in EXCHANGE_PREFIXES:
         return None
-    symbol, suffix = match.group("symbol"), match.group("suffix")
-    is_class = bool(suffix) and len(suffix) == 1 and suffix.upper() in SHARE_CLASSES
-    share_class = suffix if is_class else None
-    explicit = bool(match.group("cashtag") or exchange or (suffix and not share_class))
+    symbol, separator, suffix = match.group("symbol", "separator", "suffix")
+    share_class = venue = None
+    if suffix:
+        if len(symbol) == 1 and len(suffix) == 1:
+            return None  # "U.S", "A.I", "U.N": abbreviations, not listings
+        if len(suffix) == 1 and suffix.upper() in SHARE_CLASSES:
+            share_class = suffix
+        elif (
+            separator == "."
+            and suffix.upper() in EXCHANGE_SUFFIXES
+            and (bare or f"{symbol}{suffix}".isupper() or (symbol.isdigit() and suffix.isupper()))
+        ):
+            venue = suffix
+        else:
+            return None
+    explicit = bool(match.group("cashtag") or exchange or venue)
     if not (explicit or (bare and (value.isupper() or share_class))):
         return None
     ticker = f"{symbol}-{share_class}" if share_class else symbol
     return f"ticker:{ticker.casefold()}"
-    return None
 
 
 def choose_candidate(

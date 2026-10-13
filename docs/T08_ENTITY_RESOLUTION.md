@@ -16,3 +16,6 @@ as "AI", "IT", or "ON" and numbers such as "2026" fall through to exact-alias
 matching. Only explicit syntax is an identifier: `$AAPL`, a known exchange prefix
 (`NASDAQ: AAPL`), an exchange suffix (`2330.TW`, `AAPL.O`), or `CIK 320193`.
 Share classes written `BRK.B`, `BRK/B`, or `BRK-B` normalize to SEC's `BRK-B`.
+An exchange suffix counts only from a known venue list (`TW`, `T`, `L`, `HK`, `TO`, `O`,
+`N`, ...), written with a dot, and uppercase in article text. One letter, a dot, and one
+letter (`U.S`, `A.I`, `U.N`) is an abbreviation in either mode, never a ticker.
