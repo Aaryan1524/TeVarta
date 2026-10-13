@@ -34,18 +34,26 @@ API_TYPES = {
     "Facility": "place", "Commodity": "commodity", "Regulation": "regulator",
 }
 
+SEARCHABLE_TYPES = sorted(API_TYPES)
+
 
 class OnboardingError(Exception):
     def __init__(self, status: int, code: str, message: str) -> None:
         self.status, self.code, self.message = status, code, message
 
 
-def candidate(row: dict[str, Any]) -> EntityCandidate:
-    kind = API_TYPES.get(row["type"])
+def api_type(db_type: str) -> str:
+    """Translate a database entity type to the v1 API vocabulary used by every response."""
+    kind = API_TYPES.get(db_type)
     if kind is None:
         raise OnboardingError(
             409, "unsupported_entity_type", "This entity type is not supported by the v1 contract."
         )
+    return kind
+
+
+def candidate(row: dict[str, Any]) -> EntityCandidate:
+    kind = api_type(row["type"])
     return EntityCandidate(
         id=row["entity_id"], name=row["canonical_name"], entity_type=kind,
         ticker=row["ticker"], lifecycle=row["status"],
@@ -99,14 +107,17 @@ class PostgresOnboardingStore:
         identifier = identifier_alias(query)
         with self._connect() as connection:
             # Exact aliases retain every candidate; seed_count never chooses for a user.
+            # Types v1 cannot represent are excluded rather than failing the search.
             rows = connection.execute(
                 """SELECT DISTINCT e.* FROM entities e JOIN entity_aliases a USING(entity_id)
-                   WHERE a.alias_norm = %s ORDER BY e.entity_id""", (identifier or key,),
+                   WHERE a.alias_norm = %s AND e.type = ANY(%s)
+                   ORDER BY e.entity_id""", (identifier or key, SEARCHABLE_TYPES),
             ).fetchall()
             if not rows and identifier:
                 rows = connection.execute(
                     """SELECT DISTINCT e.* FROM entities e JOIN entity_aliases a USING(entity_id)
-                       WHERE a.alias_norm = %s ORDER BY e.entity_id""", (key,),
+                       WHERE a.alias_norm = %s AND e.type = ANY(%s)
+                       ORDER BY e.entity_id""", (key, SEARCHABLE_TYPES),
                 ).fetchall()
             exact = bool(rows)
             if not rows:
@@ -114,9 +125,10 @@ class PostgresOnboardingStore:
                 # from user input cannot change the prefix match.
                 rows = connection.execute(
                     """SELECT DISTINCT e.* FROM entities e JOIN entity_aliases a USING(entity_id)
-                       WHERE a.alias_norm LIKE %s OR a.alias_norm LIKE %s
+                       WHERE (a.alias_norm LIKE %s OR a.alias_norm LIKE %s)
+                         AND e.type = ANY(%s)
                        ORDER BY e.canonical_name, e.entity_id LIMIT 20""",
-                    (key + "%", "ticker:" + key + "%"),
+                    (key + "%", "ticker:" + key + "%", SEARCHABLE_TYPES),
                 ).fetchall()
         return EntitySearchResponse(
             query=query, candidates=[candidate(row) for row in rows],
@@ -233,7 +245,7 @@ class PostgresOnboardingStore:
             # Roots are known metadata; edges only come from worker-prepared views.
             root = {
                 "id": row["entity_id"], "name": row["canonical_name"],
-                "entity_type": row["type"],
+                "entity_type": api_type(row["type"]),
             }
             if row["entity_id"] in nodes and nodes[row["entity_id"]] != root:
                 raise OnboardingError(503, "graph_unavailable", "Graph views disagree.")

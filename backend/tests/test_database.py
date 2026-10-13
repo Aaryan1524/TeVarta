@@ -736,8 +736,9 @@ def t25_publish(dsn, entity, graph):
 
 
 def t25_graph(entity, index=0):
+    # Worker views use the v1 API vocabulary, matching fixtures/v1/graph.json.
     return {"nodes": [{"id": entity, "name": "T25 Company " + str(index),
-                       "entity_type": "Company"}], "edges": []}
+                       "entity_type": "company"}], "edges": []}
 
 
 def test_onboarding_search_retains_ambiguity_and_supports_prefix_and_ticker(onboarding_db):
@@ -754,6 +755,27 @@ def test_onboarding_search_retains_ambiguity_and_supports_prefix_and_ticker(onbo
     assert store.search("NASDAQ:T250").candidates[0].id == entities[0]
     assert store.search("%_").candidates == []
     assert store.search("absententity").candidates == []
+
+
+def test_onboarding_search_skips_types_v1_cannot_represent(onboarding_db):
+    store, dsn, _, entities = onboarding_db
+    topic = "ent_t25topic_" + uuid4().hex
+    with psycopg.connect(dsn) as connection:
+        connection.execute(
+            """INSERT INTO entities(entity_id, canonical_name, type)
+               VALUES (%s, 'T25 Apple', 'Topic')""",
+            (topic,),
+        )
+        connection.execute(
+            "INSERT INTO entity_aliases VALUES ('t25apple', %s, 'test', 1, false)", (topic,)
+        )
+    try:
+        exact, prefix = store.search("T25 Apple"), store.search("T25")
+        assert {item.id for item in exact.candidates} == set(entities) and exact.ambiguous
+        assert {item.id for item in prefix.candidates} == set(entities)
+    finally:
+        with psycopg.connect(dsn) as connection:
+            connection.execute("DELETE FROM entities WHERE entity_id = %s", (topic,))
 
 
 def test_onboarding_concurrent_seeds_count_once_and_share_durable_work(onboarding_db):
