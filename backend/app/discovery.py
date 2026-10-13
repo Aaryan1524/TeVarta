@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -209,20 +210,47 @@ def _json_candidates(
     return tuple(candidates)
 
 
+CONTACT_EMAIL = re.compile(r"[^@\s()]+@[^@\s()]+\.[A-Za-z]{2,}")
+
+
+def declared_user_agent(environ: Mapping[str, str] | None = None) -> str:
+    """Build the declared client identity SEC and other publishers require.
+
+    SEC's fair-access policy returns 403 to undeclared automated clients such as
+    Python's default User-Agent. The contact is operator configuration, never a
+    personal address baked into source.
+    """
+    values = os.environ if environ is None else environ
+    contact = values.get("TEVARTA_HTTP_CONTACT", "").strip()
+    if not CONTACT_EMAIL.fullmatch(contact):
+        raise DiscoveryConfigurationError(
+            "set TEVARTA_HTTP_CONTACT to an operations email before polling active sources"
+        )
+    return f"TeVarta/1.0 ({contact})"
+
+
 class FeedPoller:
     def __init__(
-        self, fetcher: UrlFetcher = fetch_url, now: Callable[[], datetime] = utc_now
+        self,
+        fetcher: UrlFetcher = fetch_url,
+        now: Callable[[], datetime] = utc_now,
+        user_agent: str | None = None,
     ) -> None:
-        self.fetcher, self.now = fetcher, now
+        self.fetcher, self.now, self.user_agent = fetcher, now, user_agent
 
     def poll(self, source: SourceConfig) -> tuple[DiscoveryCandidate, ...]:
         if not source.active:
             return ()
         if not source.feed_url:
             raise DiscoveryConfigurationError(f"active source {source.id} has no feed URL")
+        if not self.user_agent:
+            raise DiscoveryConfigurationError("active sources require a declared User-Agent")
         content = self.fetcher(
             source.feed_url,
-            {"Accept": "application/atom+xml, application/rss+xml, application/json"},
+            {
+                "Accept": "application/atom+xml, application/rss+xml, application/json",
+                "User-Agent": self.user_agent,
+            },
         )
         now = self.now()
         if source.ingestion_mode in {"rss", "atom"}:
@@ -420,7 +448,10 @@ def process_candidate(candidate: dict[str, object]) -> dict[str, object]:
 @celery_app.task(name="app.discovery.poll_sources")
 def poll_sources() -> int:
     sources_path = Path(os.getenv("TEVARTA_SOURCES_CONFIG", DEFAULT_SOURCES_PATH))
-    candidates = FeedPoller().poll_active(load_sources(sources_path))
+    active = [source for source in load_sources(sources_path) if source.active]
+    if not active:
+        return 0
+    candidates = FeedPoller(user_agent=declared_user_agent()).poll_active(active)
     for candidate in candidates:
         process_candidate.delay(candidate.as_payload())
     return len(candidates)

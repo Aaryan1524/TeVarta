@@ -43,3 +43,43 @@ def test_seed_count_breaks_alias_ties_but_equal_scores_remain_ambiguous() -> Non
     assert choose_candidate(candidates, {}).entity_id == "ent_mercury_company"
     tied = tuple(ResolutionCandidate(f"ent_{index}", "Apple", 1) for index in range(2))
     assert choose_candidate(tied, {}).status == "ambiguous"
+
+
+@pytest.mark.parametrize(
+    ("surface", "expected"),
+    [
+        ("$AAPL", ("ticker:aapl", 1)),
+        ("NYSE: BRK.B", ("ticker:brk-b", 1)),
+        ("BRK.B", ("ticker:brk-b", 1)),
+        ("BRK-B", ("ticker:brk-b", 1)),
+        ("BRK/B", ("ticker:brk-b", 1)),
+        ("AAPL.O", ("ticker:aapl", 1)),
+        ("Update: AI", ("updateai", 2)),
+    ],
+)
+def test_cashtags_share_classes_and_known_exchanges_normalize(
+    surface: str, expected: tuple[str, int]
+) -> None:
+    assert alias_key(surface) == expected
+
+
+@pytest.mark.parametrize("surface", ["AI", "IT", "ON", "A", "SNDK", "2026", "0001000184"])
+def test_article_text_never_treats_bare_words_or_numbers_as_identifiers(surface: str) -> None:
+    key, rung = alias_key(surface, bare=False)
+
+    assert rung == 2
+    assert not key.startswith(("ticker:", "cik:"))
+
+
+@pytest.mark.parametrize(
+    ("surface", "expected"),
+    [
+        ("$AAPL", "ticker:aapl"),
+        ("NASDAQ: SNDK", "ticker:sndk"),
+        ("NYSE: BRK.B", "ticker:brk-b"),
+        ("2330.TW", "ticker:2330"),
+        ("CIK 320193", "cik:0000320193"),
+    ],
+)
+def test_article_text_accepts_explicit_identifier_syntax(surface: str, expected: str) -> None:
+    assert alias_key(surface, bare=False) == (expected, 1)

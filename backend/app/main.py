@@ -3,7 +3,6 @@ import os
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.requests import Request
 
 from app.auth import AuthenticationError, PostgresSessionStore, SessionService
@@ -20,9 +19,9 @@ from app.operations import (
     EnvironmentConfigurationError,
     EnvironmentSettings,
     FixedWindowRateLimiter,
-    HSTSMiddleware,
     RateLimitExceeded,
     install_log_redaction,
+    install_transport_security,
 )
 from app.telemetry import MemoryTelemetryStore, PostgresTelemetryStore, TelemetryService
 
@@ -63,9 +62,7 @@ app.state.telemetry_service = (
     if app.state.auth_service is not None
     else TelemetryService(MemoryTelemetryStore())
 )
-if settings.name == "production":
-    app.add_middleware(HTTPSRedirectMiddleware)
-    app.add_middleware(HSTSMiddleware)
+install_transport_security(app, settings)
 
 install_log_redaction()
 

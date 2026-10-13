@@ -28,18 +28,46 @@ class Resolution:
     rung: int | None
 
 
-def identifier_alias(surface: str) -> str | None:
-    """Convert CIK, ticker, and exchange-qualified symbols to T07 alias keys."""
+EXCHANGE_PREFIXES = frozenset(
+    {"NYSE", "NASDAQ", "NYSEARCA", "NYSEAMERICAN", "AMEX", "OTC", "OTCMKTS", "CBOE", "BATS",
+     "TSX", "TSXV", "LSE", "HKEX", "TWSE", "TPE", "KRX", "SGX", "ASX", "XETRA", "EURONEXT"}
+)
+# SEC writes share classes with a hyphen (BRK-B); news writes BRK.B or BRK/B.
+SHARE_CLASSES = frozenset("ABC")
+_CIK = re.compile(r"(cik\s*[:#-]?\s*)?(\d{1,10})", flags=re.IGNORECASE)
+_SYMBOL = re.compile(
+    r"(?:(?P<cashtag>\$)|(?P<exchange>[A-Za-z]+)\s*:\s*)?"
+    r"(?P<symbol>[A-Za-z0-9]{1,10})"
+    r"(?:[.\-/](?P<suffix>[A-Za-z]{1,4}))?"
+)
+
+
+def identifier_alias(surface: str, *, bare: bool = True) -> str | None:
+    """Convert CIK, ticker, and exchange-qualified symbols to T07 alias keys.
+
+    `bare=True` suits a deliberate identifier query, where `SNDK` or a raw CIK means
+    what it says. Article text must pass `bare=False`: a headline's "AI", "IT", or
+    "2026" is not a ticker or CIK unless written as `$AAPL`, `NASDAQ: AAPL`,
+    `2330.TW`, or `CIK 320193`.
+    """
     value = surface.strip()
-    cik = re.fullmatch(r"(?:cik\s*[:#-]?\s*)?(\d{1,10})", value, flags=re.IGNORECASE)
+    cik = _CIK.fullmatch(value)
     if cik:
-        return f"cik:{cik.group(1).zfill(10)}"
-    exchange = re.fullmatch(
-        r"(?:[A-Za-z]+\s*:\s*)?([A-Za-z0-9]{1,10})(?:\.[A-Za-z]{2,4})?", value
-    )
-    qualified = ":" in value or "." in value
-    if exchange and (qualified or value.isupper()):
-        return f"ticker:{exchange.group(1).casefold()}"
+        return f"cik:{cik.group(2).zfill(10)}" if bare or cik.group(1) else None
+    match = _SYMBOL.fullmatch(value)
+    if not match:
+        return None
+    exchange = match.group("exchange")
+    if exchange and exchange.upper() not in EXCHANGE_PREFIXES:
+        return None
+    symbol, suffix = match.group("symbol"), match.group("suffix")
+    is_class = bool(suffix) and len(suffix) == 1 and suffix.upper() in SHARE_CLASSES
+    share_class = suffix if is_class else None
+    explicit = bool(match.group("cashtag") or exchange or (suffix and not share_class))
+    if not (explicit or (bare and (value.isupper() or share_class))):
+        return None
+    ticker = f"{symbol}-{share_class}" if share_class else symbol
+    return f"ticker:{ticker.casefold()}"
     return None
 
 
@@ -70,8 +98,8 @@ def choose_candidate(
     return Resolution("resolved", top.entity_id, tuple(ranked), None)
 
 
-def alias_key(surface: str) -> tuple[str, int]:
-    identifier = identifier_alias(surface)
+def alias_key(surface: str, *, bare: bool = True) -> tuple[str, int]:
+    identifier = identifier_alias(surface, bare=bare)
     if identifier:
         return identifier, 1
     return normalize_alias(surface), 2
@@ -89,8 +117,10 @@ class EntityResolver:
         *,
         context_cooccurrence: dict[str, int] | None = None,
         article_id: str | None = None,
+        bare_identifiers: bool = True,
     ) -> Resolution:
-        key, rung = alias_key(surface_form)
+        """Resolve one surface form; article tagging must pass bare_identifiers=False."""
+        key, rung = alias_key(surface_form, bare=bare_identifiers)
         rows = self._connection.execute(
             """SELECT entities.entity_id, entities.canonical_name, entities.seed_count
                FROM entity_aliases JOIN entities USING (entity_id)
