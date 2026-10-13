@@ -1,9 +1,11 @@
 """Run against disposable PostgreSQL databases, never an existing application schema."""
 
 import io
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,7 +15,25 @@ from alembic import command
 from alembic.config import Config
 from app.auth import PostgresSessionStore
 from app.contracts import FeedbackRequest
+from app.curation import (
+    CuratedEntity,
+    EndpointNotResolved,
+    PostgresCurationCatalog,
+    content_sha,
+    parse_curation_file,
+    parse_review_log,
+    plan_curated_load,
+    review_batch,
+)
+from app.curation_draft import DRAFT_COMPONENT, PostgresUsageMeter, TokenPrices
+from app.discovery import (
+    DiscoveryCandidate,
+    PostgresSearchBudgetStore,
+    SearchRequest,
+    SearchService,
+)
 from app.entity_resolution import EntityResolver
+from app.operations import SearchBudgetExceeded
 from app.sec_catalog import import_sec_catalog, parse_company_tickers
 from app.telemetry import PostgresTelemetryStore, UnknownEvent
 from psycopg import sql
@@ -50,6 +70,8 @@ TABLES = {
     "event_claims",
     "usage_records",
     "auth_sessions",
+    "search_query_reservations",
+    "search_budget_alerts",
 }
 
 
@@ -156,6 +178,54 @@ def test_sec_catalog_reimport_is_idempotent_and_keeps_entities_catalog(db):
     assert alias_count == 3
 
 
+def test_multi_class_issuer_resolves_by_every_ticker(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {
+                "0": {"cik_str": 1652044, "ticker": "GOOGL", "title": "Alphabet Inc."},
+                "1": {"cik_str": 1652044, "ticker": "GOOG", "title": "Alphabet Inc."},
+            }
+        ),
+    )
+    resolver = EntityResolver(db)
+
+    assert {resolver.resolve(ticker).entity_id for ticker in ("GOOGL", "GOOG")} == {
+        "ent_sec_0001652044"
+    }
+    assert db.execute(
+        "SELECT ticker FROM entities WHERE entity_id = 'ent_sec_0001652044'"
+    ).fetchone() == ("GOOGL",)
+
+
+def test_reimport_moves_a_reassigned_ticker_without_identifier_collision(db):
+    def payload(*rows):
+        return parse_company_tickers(
+            {str(index): row for index, row in enumerate(rows)}
+        )
+
+    old = {"cik_str": 1111, "ticker": "MOVE", "title": "Old Holder Inc."}
+    new = {"cik_str": 2222, "ticker": "MOVE", "title": "New Holder Inc."}
+    import_sec_catalog(db, payload(old, {"cik_str": 1111, "ticker": "OLDB",
+                                         "title": "Old Holder Inc."}))
+
+    # The old holder vanished from the file; its ticker now belongs to another CIK.
+    import_sec_catalog(db, payload(new))
+    # The old holder is back without that ticker (a class it no longer lists).
+    import_sec_catalog(db, payload(new, {"cik_str": 1111, "ticker": "OLDC",
+                                         "title": "Old Holder Inc."}))
+
+    rows = db.execute(
+        """SELECT alias_norm, entity_id FROM entity_aliases
+           WHERE alias_norm LIKE 'ticker:%' AND entity_id IN
+             ('ent_sec_0000001111', 'ent_sec_0000002222') ORDER BY alias_norm"""
+    ).fetchall()
+    assert rows == [
+        ("ticker:move", "ent_sec_0000002222"),
+        ("ticker:oldc", "ent_sec_0000001111"),
+    ]
+
+
 def test_entity_resolver_logs_unresolved_aliases_without_tagging(db):
     db.execute(
         "INSERT INTO entities (entity_id, canonical_name, type, seed_count) VALUES "
@@ -176,6 +246,23 @@ def test_entity_resolver_logs_unresolved_aliases_without_tagging(db):
         "SELECT count(*) FROM resolution_misses WHERE surface_form = 'Mercury'"
     ).fetchone()[0]
     assert miss_count == 1
+
+
+def test_article_resolution_ignores_bare_headline_words_but_query_resolves_tickers(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 1090872, "ticker": "A", "title": "Agilent Technologies Inc."}}
+        ),
+    )
+    resolver = EntityResolver(db)
+
+    assert resolver.resolve("A").entity_id == "ent_sec_0001090872"
+    article = resolver.resolve("A", bare_identifiers=False)
+    assert (article.status, article.rung) == ("unresolved", 2)
+    assert resolver.resolve("NYSE: A", bare_identifiers=False).entity_id == (
+        "ent_sec_0001090872"
+    )
 
 
 @pytest.mark.parametrize("table", ["user_seeds", "user_feed", "feedback", "event_articles"])
@@ -353,7 +440,7 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0002"
+                == "0003_search_budget_reservations"
             )
     finally:
         engine.dispose()
@@ -434,6 +521,180 @@ def test_usage_request_deduplication(db):
             FROM usage_records""")
 
 
+def test_search_budget_is_shared_across_concurrent_workers_and_alerts_once(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    alerts: list[dict[str, object]] = []
+    now = datetime(2026, 9, 20, tzinfo=UTC)
+
+    def reserve(index: int):
+        store = PostgresSearchBudgetStore(dsn, monthly_query_cap=5)
+        reservation = store.reserve(uuid4(), now)
+        if reservation.alert_80_percent:
+            alerts.append({"event": "search_cap_80_percent", "used": reservation.used})
+        return reservation
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(reserve, index) for index in range(8)]
+    reservations = []
+    blocked = 0
+    for future in futures:
+        try:
+            reservations.append(future.result())
+        except SearchBudgetExceeded:
+            blocked += 1
+
+    assert len(reservations) == 5
+    assert blocked == 3
+    assert sum(reservation.alert_80_percent for reservation in reservations) == 1
+    assert alerts == [{"event": "search_cap_80_percent", "used": 4}]
+
+
+def test_search_usage_receipts_track_success_and_blocked_requests(migrated_url):
+    dsn = migrated_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+
+    class Provider:
+        def search(self, _request):
+            return (
+                DiscoveryCandidate(
+                    "https://example.invalid/result",
+                    "Synthetic result",
+                    None,
+                    "fixture",
+                    now,
+                    "fixture",
+                ),
+            )
+
+    service = SearchService(Provider(), PostgresSearchBudgetStore(dsn, monthly_query_cap=1))
+    service.search(SearchRequest(uuid4(), "Apple", now - timedelta(hours=24), 1), now)
+    with pytest.raises(SearchBudgetExceeded):
+        service.search(SearchRequest(uuid4(), "SanDisk", now - timedelta(hours=24), 1), now)
+
+    with psycopg.connect(dsn) as connection:
+        rows = connection.execute(
+            "SELECT outcome, quantity, query_count FROM usage_records ORDER BY occurred_at"
+        ).fetchall()
+    assert rows == [("success", 1, 1), ("blocked", 0, 0)]
+
+
+TAIWAN = CuratedEntity("ent_cur_country_taiwan", "Taiwan", "Country", ("Taiwan",))
+
+
+def test_curation_catalog_resolves_strictly_without_logging_misses(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}
+        ),
+    )
+    catalog = PostgresCurationCatalog(db)
+    catalog.upsert_curated_entities([TAIWAN])
+    catalog.upsert_curated_entities([TAIWAN])  # idempotent
+
+    by_ticker = catalog.resolve("AAPL")
+    by_alias = catalog.resolve("Taiwan")
+    by_id = catalog.resolve("ent_cur_country_taiwan")
+
+    assert (by_ticker.entity_id, by_ticker.resolution_quality) == ("ent_sec_0000320193", 1.0)
+    assert (by_alias.entity_id, by_alias.entity_type, by_alias.resolution_quality) == (
+        "ent_cur_country_taiwan", "Country", 0.7
+    )
+    assert by_id.resolution_quality == 1.0
+    with pytest.raises(EndpointNotResolved, match="ambiguous"):
+        catalog.resolve("Apple")  # fixture company, fixture fruit topic, and SEC Apple
+    with pytest.raises(EndpointNotResolved, match="did not resolve"):
+        catalog.resolve("TSMC")
+    with pytest.raises(EndpointNotResolved, match="not a known entity_id"):
+        catalog.resolve("ent_cur_missing")
+    assert db.execute("SELECT count(*) FROM resolution_misses").fetchone()[0] == 0
+    assert db.execute(
+        "SELECT source, is_identifier FROM entity_aliases WHERE entity_id = %s",
+        (TAIWAN.entity_id,),
+    ).fetchall() == [("curated", False)]
+
+
+def test_reviewed_curated_edge_plans_against_the_real_catalog(db):
+    import_sec_catalog(
+        db,
+        parse_company_tickers(
+            {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}
+        ),
+    )
+    catalog = PostgresCurationCatalog(db)
+    catalog.upsert_curated_entities([TAIWAN])
+    evidence = {
+        "url": "https://www.sec.gov/Archives/edgar/data/320193/aapl-20250927.htm",
+        "source_type": "sec_filing",
+        "publisher_group": "apple",
+    }
+    batch = {
+        "batch_id": "aapl-20260928",
+        "drafted_by": "human",
+        "drafted_at": "2026-09-28T10:00:00+00:00",
+        "usage_request_id": None,
+        "subject": "AAPL",
+        "evidence": [evidence],
+        "proposals": [
+            {
+                "proposal_id": "aapl-20260928-01",
+                "draft": None,
+                "draft_sha": None,
+                "decision": "accept",
+                "reason": None,
+                "edge": {
+                    "source": "AAPL", "relation": "EXPOSED_TO", "target": "Taiwan",
+                    "weight": 0.8, "directness": 1.0,
+                    "rationale": "Filing discloses manufacturing concentration in Taiwan",
+                    "evidence": [evidence], "valid_from": "2025-09-27",
+                    "review_by": "2027-03-28",
+                },
+            }
+        ],
+    }
+    empty = parse_curation_file({"entities": [], "edges": []})
+    outcome = review_batch(batch, empty, parse_review_log([]), "aaryan", date(2026, 9, 28))
+    log = parse_review_log(json.dumps(record.as_json()) for record in outcome.decided)
+
+    [planned] = plan_curated_load(outcome.curation, log, catalog)
+
+    assert planned.revision.from_entity_id == "ent_sec_0000320193"
+    assert planned.revision.to_entity_id == "ent_cur_country_taiwan"
+    # SEC filing (1.0), one publisher group, stated, alias-resolved endpoint (0.7).
+    assert planned.revision.confidence == pytest.approx(0.35 + 0.25 / 3 + 0.25 + 0.105)
+    assert planned.revision.source_ids == (f"curated:{content_sha(outcome.decided[0].edge)}",)
+
+
+def test_curation_draft_meter_records_a_costed_redacted_receipt(database_factory):
+    url = database_factory()
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        command.upgrade(alembic_config(connection), "head")
+    engine.dispose()
+    dsn = url.set(drivername="postgresql").render_as_string(hide_password=False)
+    meter = PostgresUsageMeter(dsn, TokenPrices(Decimal("2"), Decimal("8")))
+    request_id = uuid4()
+
+    meter.check_available()
+    for _ in range(2):  # a retried receipt write never double-counts
+        meter.record(
+            request_id, "success", provider="openai", model="configured-model",
+            input_tokens=500_000, output_tokens=50_000, latency_ms=1234,
+        )
+
+    with psycopg.connect(dsn) as connection:
+        rows = connection.execute(
+            """SELECT component, outcome, quantity, unit, estimated_cost_usd, provider,
+                      model, input_tokens, output_tokens, latency_ms
+               FROM usage_records WHERE request_id = %s""",
+            (request_id,),
+        ).fetchall()
+    assert rows == [
+        (DRAFT_COMPONENT, "success", 1, "call", Decimal("1.4"), "openai", "configured-model",
+         500_000, 50_000, 1234)
+    ]
+
+
 def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
     engine = create_engine(database_factory())
     try:
@@ -466,7 +727,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0002"
+                == "0003_search_budget_reservations"
             )
     finally:
         engine.dispose()

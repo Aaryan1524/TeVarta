@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,8 +48,11 @@ ENTITY_TYPES = frozenset(
         "Organization",
     }
 )
-# T14 is the first code path permitted to add human-accepted curated edges.
 WRITE_ORIGINS = frozenset({"structured", "extracted"})
+# Curated edges enter only through create_curated_edge_revision, whose sole caller is
+# the T14 reviewed-curation loader; source_ids must point at a reviewed curation SHA.
+CURATED_ORIGIN = "curated"
+CURATED_SOURCE_ID = re.compile(r"curated:[0-9a-f]{64}")
 
 
 class GraphWriteError(ValueError):
@@ -235,12 +239,14 @@ def _claim_parameters(
     return payload | {"request_id": str(request_id), "payload_hash": payload_hash}
 
 
-def _revision_parameters(revision: TemporalEdgeRevision) -> dict[str, Any]:
+def _revision_parameters(
+    revision: TemporalEdgeRevision, allowed_origins: frozenset[str] = WRITE_ORIGINS
+) -> dict[str, Any]:
     _validate_endpoint_pair(revision.from_entity_id, revision.to_entity_id)
     _validate_relation(revision.relation_type)
     _validate_source_ids(revision.source_ids)
     _validate_aware(revision.valid_from, revision.observed_at)
-    if revision.origin not in WRITE_ORIGINS:
+    if revision.origin not in allowed_origins:
         raise GraphWriteError("origin is not allowed by the active write workflow")
     if (
         isinstance(revision.evidence_count, bool)
@@ -330,6 +336,19 @@ class GraphStore:
         self, revision: TemporalEdgeRevision
     ) -> TemporalWriteResult:
         parameters = _revision_parameters(revision)
+        with self._driver.session(database=self._database) as session:
+            return session.execute_write(self._create_revision, parameters)
+
+    def create_curated_edge_revision(
+        self, revision: TemporalEdgeRevision
+    ) -> TemporalWriteResult:
+        """Write one human-reviewed curated edge; replays by its curation-derived ID."""
+        if revision.origin != CURATED_ORIGIN or not all(
+            isinstance(source_id, str) and CURATED_SOURCE_ID.fullmatch(source_id)
+            for source_id in revision.source_ids
+        ):
+            raise GraphWriteError("curated edges require curated:<sha256> provenance")
+        parameters = _revision_parameters(revision, frozenset({CURATED_ORIGIN}))
         with self._driver.session(database=self._database) as session:
             return session.execute_write(self._create_revision, parameters)
 

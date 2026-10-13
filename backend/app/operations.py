@@ -19,9 +19,12 @@ from threading import Lock
 from time import monotonic
 from typing import Any
 
+from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 SENSITIVE_FIELD_NAMES = frozenset(
     {
@@ -151,6 +154,35 @@ class HSTSMiddleware(BaseHTTPMiddleware):
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
+
+
+def install_transport_security(
+    app: Starlette, settings: EnvironmentSettings, environ: Mapping[str, str] | None = None
+) -> None:
+    """Enforce HTTPS in production, correctly behind a TLS-terminating proxy.
+
+    A hosted API usually receives plain HTTP from its load balancer. Without trusted
+    X-Forwarded-* handling, the HTTPS redirect loops forever and every request
+    appears to come from the proxy's IP, so per-IP auth rate limits would throttle
+    all users together. Only proxies listed in TEVARTA_TRUSTED_PROXIES (IPs or CIDR
+    ranges; default loopback) may set the scheme and client address.
+    """
+    if settings.name != "production":
+        return
+    values = os.environ if environ is None else environ
+    trusted = [
+        host.strip()
+        for host in values.get("TEVARTA_TRUSTED_PROXIES", "127.0.0.1").split(",")
+        if host.strip()
+    ]
+    if "*" in trusted:
+        raise EnvironmentConfigurationError(
+            "TEVARTA_TRUSTED_PROXIES must list proxy addresses; '*' lets clients spoof HTTPS"
+        )
+    app.add_middleware(HTTPSRedirectMiddleware)
+    app.add_middleware(HSTSMiddleware)
+    # Added last, so outermost: the scheme is corrected before the redirect check.
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted)
 
 
 def install_log_redaction() -> None:

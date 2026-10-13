@@ -1,3 +1,7 @@
-# Curated graph edges are added only by the reviewed T14/T15 workflow.
-# Every accepted edge will include evidence, validity, provenance, and review data.
+# Reviewed curated World Graph edges (frozen MVP §6.2); see docs/T14_CURATION_WORKFLOW.md.
+# Declare non-SEC entities by hand. Add edges only via `scripts/curate_edges.py review`,
+# which re-renders this file: each edge must match an accept/edit record in
+# graph/curation/review_log.jsonl by content SHA or the loader refuses it.
+# Confidence is computed from evidence (§9.1) and is never written here.
+entities: []
 edges: []

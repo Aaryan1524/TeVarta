@@ -265,3 +265,74 @@ def test_history_read_maps_only_presentation_safe_temporal_fields():
     assert [record.revision_id for record in result] == ["prior", "current"]
     assert result[0].source_ids == ("art_1",)
     assert transaction.queries[0][0] == HISTORY[RELATION]
+
+
+CURATED_SOURCE = "curated:" + "a" * 64
+
+
+class FakeSession:
+    def __init__(self, driver):
+        self._driver = driver
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def execute_write(self, work, parameters):
+        self._driver.writes.append((work, parameters))
+        return "written"
+
+
+class FakeDriver:
+    def __init__(self):
+        self.writes = []
+
+    def session(self, database):
+        return FakeSession(self)
+
+
+def test_curated_revision_uses_the_temporal_transaction_with_curated_provenance():
+    driver = FakeDriver()
+
+    result = GraphStore(driver).create_curated_edge_revision(
+        revision(origin="curated", source_ids=(CURATED_SOURCE,))
+    )
+
+    [(work, parameters)] = driver.writes
+    assert result == "written"
+    assert work == GraphStore._create_revision
+    assert parameters["origin"] == "curated"
+    assert parameters["source_ids"] == [CURATED_SOURCE]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"origin": "structured", "source_ids": (CURATED_SOURCE,)},
+        {"origin": "curated", "source_ids": ("art_123",)},
+        {"origin": "curated", "source_ids": (CURATED_SOURCE, "art_123")},
+        {"origin": "curated", "source_ids": ("curated:" + "A" * 64,)},
+        {"origin": "curated", "source_ids": ("curated:abc",)},
+        {"origin": "curated", "source_ids": ()},
+    ],
+)
+def test_curated_writes_require_reviewed_sha_provenance(overrides):
+    driver = FakeDriver()
+
+    with pytest.raises(GraphWriteError):
+        GraphStore(driver).create_curated_edge_revision(revision(**overrides))
+
+    assert driver.writes == []
+
+
+def test_general_revision_path_still_rejects_curated_origin():
+    driver = FakeDriver()
+
+    with pytest.raises(GraphWriteError, match="origin is not allowed"):
+        GraphStore(driver).create_temporal_edge_revision(
+            revision(origin="curated", source_ids=(CURATED_SOURCE,))
+        )
+
+    assert driver.writes == []
