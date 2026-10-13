@@ -34,6 +34,8 @@ class User(StrictModel):
 class AppleAuthRequest(StrictModel):
     identity_token: str = Field(min_length=1)
     authorization_code: str | None = None
+    # Raw one-time nonce; the client sends its SHA-256 hex to Apple as request.nonce.
+    nonce: str | None = Field(default=None, min_length=16, max_length=128)
 
 
 class RefreshRequest(StrictModel):
