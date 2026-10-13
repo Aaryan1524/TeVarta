@@ -16,7 +16,7 @@ backend-lint:
 .PHONY: database-test database-upgrade
 database-test:
 	@test -n "$$TEVARTA_TEST_POSTGRES_URL" || (echo "Set TEVARTA_TEST_POSTGRES_URL"; exit 1)
-	$(PYTHON) -m pytest backend/tests/test_database.py
+	$(PYTHON) -m pytest -m database
 
 .PHONY: graph-test
 # With a URI set, Neo4j fixtures connect or error; they never skip. Pytest exits
