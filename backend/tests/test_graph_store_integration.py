@@ -149,3 +149,35 @@ def test_concurrent_duplicate_request_creates_one_edge_and_one_replay(graph_stor
     assert sorted(result.replayed for result in results) == [False, True]
     assert results[0].revision_id == results[1].revision_id
     assert len(graph_store.read_edge_history(source_id, target_id, "SUPPLIES")) == 1
+
+
+def test_upstream_read_follows_impact_direction_and_current_edges(graph_store):
+    suffix = uuid4().hex
+    ids = {name: f"ent_up_{name}_{suffix}" for name in
+           ("subject", "supplier", "dependency", "customer", "rival", "former")}
+    for entity_id in ids.values():
+        graph_store.upsert_entity(entity_id, entity_id, "Company")
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def edge(source, relation, target):
+        graph_store.create_temporal_edge_revision(TemporalEdgeRevision(
+            uuid4(), ids[source], ids[target], relation, 0.8, 0.7, start, start,
+            ("fixture:upstream",), 1, 1.0, "structured"))
+
+    edge("subject", "DEPENDS_ON", "dependency")   # outgoing forward: upstream
+    edge("supplier", "SUPPLIES", "subject")       # incoming reverse: upstream
+    edge("customer", "DEPENDS_ON", "subject")     # incoming forward: downstream
+    edge("rival", "COMPETES_WITH", "subject")     # both
+    edge("subject", "DEPENDS_ON", "former")
+    graph_store.invalidate_temporal_edge(TemporalEdgeInvalidation(
+        uuid4(), ids["subject"], ids["former"], "DEPENDS_ON",
+        datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 1, tzinfo=UTC), ("fixture:end",)))
+
+    rows = graph_store.read_upstream_neighbors([ids["subject"]])
+
+    assert {row.neighbor_id for row in rows} == {ids["dependency"], ids["supplier"], ids["rival"]}
+    supplier = next(row for row in rows if row.neighbor_id == ids["supplier"])
+    assert (supplier.from_entity_id, supplier.to_entity_id, supplier.weight) == (
+        ids["supplier"], ids["subject"], 0.8)
+    with pytest.raises(GraphWriteError):
+        graph_store.read_upstream_neighbors(["usr_someone"])

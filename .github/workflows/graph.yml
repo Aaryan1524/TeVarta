@@ -24,10 +24,24 @@ jobs:
           --health-interval 5s
           --health-timeout 10s
           --health-retries 24
+      # Cross-store tests (Phase 2 integration proof) also need PostgreSQL.
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg16-bookworm
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: tevarta_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tevarta_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       # Disposable CI-only credential for the throwaway service container.
       TEVARTA_TEST_NEO4J_URI: bolt://localhost:7687
       TEVARTA_TEST_NEO4J_PASSWORD: ci-graph-password
+      TEVARTA_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/tevarta_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

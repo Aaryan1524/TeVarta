@@ -36,6 +36,7 @@ from app.curation_draft import (
     TokenPrices,
     draft_batch,
 )
+from app.expansion import request_republish
 from app.graph_store import GraphStore
 from neo4j import GraphDatabase
 
@@ -154,7 +155,14 @@ def command_load(args: argparse.Namespace) -> int:
         store.initialize()
         results = apply_curated_load(plan, store)
     _print([result.as_dict() for result in results])
-    return 1 if any(result.status == "failed" for result in results) else 0
+    if any(result.status == "failed" for result in results):
+        return 1
+    if any(result.status != "replayed" for result in results):
+        # Prepared graph views embed curated edges: rebuild every published view (T23).
+        with psycopg.connect(args.database_url) as connection:
+            queued = request_republish(connection)
+        print(f"re-queued {queued} prepared graph view(s) for republication", file=sys.stderr)
+    return 0
 
 
 def command_show(args: argparse.Namespace) -> int:

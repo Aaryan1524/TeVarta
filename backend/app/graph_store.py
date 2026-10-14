@@ -48,6 +48,32 @@ ENTITY_TYPES = frozenset(
         "Organization",
     }
 )
+# Which way an event's impact travels along each relation, read on the stored edge
+# (a)-[R]->(b). "forward": b affects a (a depends on b). "reverse": a affects b.
+# "both": either endpoint affects the other. Expansion (T23) and impact propagation
+# (T37) share this table so the graph screen and the feed agree on what reaches a seed.
+IMPACT_DIRECTION = MappingProxyType(
+    {
+        "DEPENDS_ON": "forward",
+        "MANUFACTURES_AT": "forward",
+        "EXPOSED_TO": "forward",
+        "OPERATES_IN": "forward",
+        "REGULATED_BY": "forward",
+        "IN_INDUSTRY": "forward",
+        "PRODUCES": "forward",
+        "CUSTOMER_OF": "forward",  # the customer is exposed to its supplier
+        "SUPPLIES": "reverse",
+        "SOLE_SOURCE_FOR": "reverse",
+        "OPERATED_BY": "reverse",  # a facility's events reach its operator
+        "SUBSIDIARY_OF": "both",
+        "LISTED_AS": "both",
+        "COMPETES_WITH": "both",
+    }
+)
+assert set(IMPACT_DIRECTION) == RELATION_TYPES
+# From a subject, the upstream neighbours are the far ends of these edges.
+UPSTREAM_OUTGOING = tuple(sorted(r for r, d in IMPACT_DIRECTION.items() if d != "reverse"))
+UPSTREAM_INCOMING = tuple(sorted(r for r, d in IMPACT_DIRECTION.items() if d != "forward"))
 WRITE_ORIGINS = frozenset({"structured", "extracted"})
 # Curated edges enter only through create_curated_edge_revision, whose sole caller is
 # the T14 reviewed-curation loader; source_ids must point at a reviewed curation SHA.
@@ -93,6 +119,28 @@ class TemporalEdgeRecord:
     valid_until: datetime | None
     invalidated_at: datetime | None
     source_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GraphEntity:
+    entity_id: str
+    canonical_name: str
+    type: str
+
+
+@dataclass(frozen=True)
+class UpstreamEdge:
+    """One current edge through which `neighbor_id` can affect `subject_id`."""
+
+    subject_id: str
+    neighbor_id: str
+    neighbor_name: str
+    neighbor_type: str
+    from_entity_id: str
+    to_entity_id: str
+    relation_type: str
+    weight: float
+    confidence: float
 
 
 @dataclass(frozen=True)
@@ -170,6 +218,24 @@ HISTORY_TEMPLATE = (
     "RETURN e.revision_id AS revision_id, e.valid_from AS valid_from, "
     "e.valid_until AS valid_until, e.invalidated_at AS invalidated_at, "
     "e.source_ids AS source_ids ORDER BY e.valid_from ASC"
+)
+READ_ENTITY = (
+    "MATCH (e:Entity {entity_id: $entity_id}) "
+    "RETURN e.entity_id AS entity_id, e.canonical_name AS canonical_name, e.type AS type"
+)
+# Current upstream edges of every subject in one round trip, in a stable order.
+READ_UPSTREAM_NEIGHBORS = (
+    "UNWIND $entity_ids AS subject_id "
+    "MATCH (s:Entity {entity_id: subject_id})-[e]-(n:Entity) "
+    "WHERE n.entity_id <> subject_id AND e.valid_until IS NULL "
+    "AND e.invalidated_at IS NULL "
+    "AND ((startNode(e) = s AND type(e) IN $upstream_outgoing) "
+    "OR (endNode(e) = s AND type(e) IN $upstream_incoming)) "
+    "RETURN subject_id, n.entity_id AS neighbor_id, n.canonical_name AS neighbor_name, "
+    "n.type AS neighbor_type, startNode(e).entity_id AS from_entity_id, "
+    "endNode(e).entity_id AS to_entity_id, type(e) AS relation_type, "
+    "e.weight AS weight, e.confidence AS confidence "
+    "ORDER BY subject_id, neighbor_id, relation_type, from_entity_id"
 )
 LATEST = MappingProxyType(
     {relation: _relation_query(LATEST_TEMPLATE, relation) for relation in RELATION_TYPES}
@@ -371,6 +437,43 @@ class GraphStore:
         }
         with self._driver.session(database=self._database) as session:
             return session.execute_read(self._read_history, parameters)
+
+    def read_entity(self, entity_id: str) -> GraphEntity | None:
+        records, _, _ = self._driver.execute_query(
+            READ_ENTITY, entity_id=entity_id, database_=self._database
+        )
+        if not records:
+            return None
+        record = records[0]
+        return GraphEntity(record["entity_id"], record["canonical_name"], record["type"])
+
+    def read_upstream_neighbors(self, entity_ids: Sequence[str]) -> list[UpstreamEdge]:
+        """Named read for bounded traversal: current edges that carry impact inward."""
+        if any(not entity_id or entity_id.startswith("usr_") for entity_id in entity_ids):
+            raise GraphWriteError("upstream reads take entity IDs only")
+        if not entity_ids:
+            return []
+        records, _, _ = self._driver.execute_query(
+            READ_UPSTREAM_NEIGHBORS,
+            entity_ids=list(entity_ids),
+            upstream_outgoing=list(UPSTREAM_OUTGOING),
+            upstream_incoming=list(UPSTREAM_INCOMING),
+            database_=self._database,
+        )
+        return [
+            UpstreamEdge(
+                subject_id=record["subject_id"],
+                neighbor_id=record["neighbor_id"],
+                neighbor_name=record["neighbor_name"],
+                neighbor_type=record["neighbor_type"],
+                from_entity_id=record["from_entity_id"],
+                to_entity_id=record["to_entity_id"],
+                relation_type=record["relation_type"],
+                weight=float(record["weight"]),
+                confidence=float(record["confidence"]),
+            )
+            for record in records
+        ]
 
     @staticmethod
     def _claim_request(

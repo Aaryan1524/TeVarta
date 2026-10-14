@@ -35,6 +35,7 @@ API_TYPES = {
 }
 
 SEARCHABLE_TYPES = sorted(API_TYPES)
+EXPANSION_MAX_ATTEMPTS = 3  # mirrors app.expansion.MAX_ATTEMPTS
 
 
 class OnboardingError(Exception):
@@ -163,15 +164,19 @@ class PostgresOnboardingStore:
                 raise OnboardingError(
                     409, "unsupported_seed_source", "This seed source is not supported by v1."
                 )
-            # A durable request survives API restarts and broker outages. T23 owns
-            # consumption; no speculative Celery task name is dispatched here.
+            # A durable request survives API restarts and broker outages; T23's dispatcher
+            # claims it. Seeding again revives a request that exhausted its retries.
             connection.execute(
                 """INSERT INTO entity_expansion_requests(entity_id) SELECT %s
                    WHERE NOT EXISTS (SELECT 1 FROM entity_graph_views v
                                      JOIN entities e USING(entity_id)
                                      WHERE entity_id = %s AND v.status = 'ready'
                                        AND e.status = 'live')
-                   ON CONFLICT DO NOTHING""", (body.entity_id, body.entity_id),
+                   ON CONFLICT (entity_id) DO UPDATE
+                   SET status = 'pending', attempts = 0, requested_at = now(), last_error = NULL
+                   WHERE entity_expansion_requests.status = 'failed'
+                     AND entity_expansion_requests.attempts >= %s""",
+                (body.entity_id, body.entity_id, EXPANSION_MAX_ATTEMPTS),
             )
             return SeedResponse(
                 seed=Seed(entity=item, weight=float(saved["weight"]), source=saved["source"]),
