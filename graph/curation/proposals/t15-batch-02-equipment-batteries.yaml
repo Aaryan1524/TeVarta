@@ -21,7 +21,7 @@ proposals:
       Inc., and Taiwan Semiconductor Manufacturing Company.
     excerpt_verified: true
   draft_sha: a94ae8f66149c66dd093f0614a15957acd536378b7c36f46c4a6ed9d5cf90b3f
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: LRCX
@@ -49,7 +49,7 @@ proposals:
       Inc., and Taiwan Semiconductor Manufacturing Company.
     excerpt_verified: true
   draft_sha: fcf65c70eaae7e0974df5adfe611273c79d38cdec99f1c646d294449d85ad928
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: LRCX
@@ -77,7 +77,7 @@ proposals:
       Inc., and Taiwan Semiconductor Manufacturing Company.
     excerpt_verified: true
   draft_sha: cb0aa93c95ed266f231d6955f58d50c0074cbef2bd329fcb1a941e413a475103
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: LRCX
@@ -105,7 +105,7 @@ proposals:
       Inc., and Taiwan Semiconductor Manufacturing Company.
     excerpt_verified: true
   draft_sha: b15fc5c399d644c3301c91b62f37f8484b50674fcc151d38f8e2f874c0f9725f
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: LRCX
@@ -135,7 +135,7 @@ proposals:
       Manufacturing Company Limited'
     excerpt_verified: true
   draft_sha: 4bdf5e4e40da5c51db24a1a52002b2513d016c09676687560ec8a5ffaa0bce98
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: KLAC
@@ -164,7 +164,7 @@ proposals:
       Limited (CATL) for these cells.
     excerpt_verified: true
   draft_sha: f3bf1464e82a2b721a0cb161fc809cefd33aa287f5c688e9b514b69bc643bf0e
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: TSLA
@@ -193,7 +193,7 @@ proposals:
       Limited (CATL) for these cells.
     excerpt_verified: true
   draft_sha: b9aeb007f9e08ddfbc12c7c7c995fd5481c82073096786b3f9d32bbf256fa4db
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: TSLA
@@ -224,7 +224,7 @@ proposals:
       18A-P.
     excerpt_verified: true
   draft_sha: e1dbb7effc923caa56e4e1b8033fc9cee9664811651b09e8808ba9bb498b9c8e
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: INTC
@@ -254,7 +254,7 @@ proposals:
       2019.
     excerpt_verified: true
   draft_sha: 03633a6417ecf5a7ac2ceb2c7229baf3afcecb8d96aed5271d6fb14bd7c7e113
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: MSFT

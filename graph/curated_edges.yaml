@@ -357,3 +357,162 @@ edges:
   review_by: 2027-04-13
   proposal_id: t15-batch-01-sc2-foundry-16
   drafted_by: llm:claude-opus-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: TSM
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists TSMC among its most significant customers, i.e. it supplies TSMC's fabs.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-01
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: MU
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists Micron among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-02
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: SKHY
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists SK hynix among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-03
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: Samsung Electronics
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists Samsung Electronics among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-04
+  drafted_by: llm:claude-sonnet-5-5
+- source: KLAC
+  relation: SUPPLIES
+  target: TSM
+  weight: 0.85
+  directness: 1.0
+  rationale: TSMC accounted for more than 10% of KLA's revenue in each of the last three fiscal years,
+    primarily process-control equipment.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/319201/000031920126000027/klac-20260630.htm
+    source_type: sec_filing
+    publisher_group: kla
+    locator: Form 10-K, fiscal year ended 2026-06-30; Business, customers over 10% of revenue
+  valid_from: 2026-06-30
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-05
+  drafted_by: llm:claude-sonnet-5-5
+- source: TSLA
+  relation: DEPENDS_ON
+  target: Panasonic
+  weight: 0.9
+  directness: 1.0
+  rationale: Tesla relies on Panasonic for lithium-ion battery cells and has qualified only a very limited
+    number of suppliers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm
+    source_type: sec_filing
+    publisher_group: tesla
+    locator: Form 10-K, fiscal year ended 2025-12-31; risk factors, battery cell supply
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-06
+  drafted_by: llm:claude-sonnet-5-5
+- source: TSLA
+  relation: DEPENDS_ON
+  target: CATL
+  weight: 0.9
+  directness: 1.0
+  rationale: Tesla relies on CATL for lithium-ion battery cells and has qualified only a very limited
+    number of suppliers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm
+    source_type: sec_filing
+    publisher_group: tesla
+    locator: Form 10-K, fiscal year ended 2025-12-31; risk factors, battery cell supply
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-07
+  drafted_by: llm:claude-sonnet-5-5
+- source: INTC
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 0.6
+  rationale: 'Conditional: if Intel cannot secure a major external foundry customer for 14A it expects
+    to shift manufacturing to third-party foundries, particularly TSMC. Reviewer: consider a lower weight
+    than the default.'
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/50863/000005086326000011/intc-20251227.htm
+    source_type: sec_filing
+    publisher_group: intel
+    locator: Form 10-K, fiscal year ended 2025-12-27; Business, strategy
+  valid_from: 2025-12-27
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-08
+  drafted_by: llm:claude-sonnet-5-5
+- source: MSFT
+  relation: DEPENDS_ON
+  target: OpenAI
+  weight: 0.9
+  directness: 0.6
+  rationale: 'Microsoft has a long-term strategic partnership with OpenAI (since 2019); the filing does
+    not state a supply dependency, so this is inferred. Reviewer: consider a lower weight.'
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm
+    source_type: sec_filing
+    publisher_group: microsoft
+    locator: Form 10-K, fiscal year ended 2026-06-30; strategic partnership
+  valid_from: 2026-06-30
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-09
+  drafted_by: llm:claude-sonnet-5-5
