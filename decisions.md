@@ -37,8 +37,14 @@ The frozen MVP remains the source of truth. This log records implementation choi
 2026-10-13 — T23 view types beyond v1 (pending, part of the T25 enum conflict) — Prepared views write v1 API types where they exist and the lowercased database type otherwise (`industry`, `macrofactor`) — Aaryan; GraphNode.entity_type is free text in v1, so this needs no contract change; revisit with the enum decision.
 
 2026-10-13 — T19 search provider (pending Aaditya's confirmation) — Brave News Search is the one SearchProvider: metadata only, `freshness` window plus a per-result cut-off, behind the existing hard monthly cap (1,500 queries, alarm at 80%); results enter as unvetted `web:<host>` sources unless the host is configured — Aaryan chose it 2026-10-13; §2 hybrid discovery and §18 search budget. Revisit if result quality or cost is poor in Week 5 dogfooding.
+
+2026-10-13 — T21 SimHash near-duplicate threshold — 12 of 64 bits within ±7 days — Aaryan; measured on SEC filing and newsroom excerpts (1.5k–6k chars): byline, 'UPDATE 1-', word swaps and 5% truncation stay ≤ 10 bits; unrelated passages ≥ 21. Revisit with the T27 labelled set.
+2026-10-13 — T21 tier after body fetch (pending founder confirmation) — Body tags may add entities (`found_in='body'`) but never rewrite the metadata tier, including for T22's high-tier override and audit sample, so the recall audit keeps the original assignment — Aaryan; §7.2 does not specify re-tiering.
+2026-10-13 — T21 body storage — Content-addressed local private storage (`TEVARTA_BODY_STORE_DIR`) until R2 credentials exist; same `put` interface, bytes metered as `r2` — Aaryan; §7.4 private processing only, never served.
+=======
 =======
 =======
 2026-10-13 — T15 agent-drafted batches (pending founder confirmation) — Batches drafted in a Claude Code session are labelled `drafted_by: llm:claude-opus-5-5` with a session-generated `usage_request_id` that has no `usage_records` row, because the drafting ran outside the product's metered OpenAI path. Every excerpt is fetched from its source URL and verified verbatim before the batch is written — Aaryan; keeps model provenance truthful without inventing metering. Human acceptance (Aaryan) and Aaditya's PR review remain required for every edge.
+
 
 

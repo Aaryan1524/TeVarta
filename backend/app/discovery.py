@@ -509,7 +509,12 @@ def process_candidate(candidate: dict[str, object]) -> dict[str, object]:
     from app.ingest import MetadataStage
 
     with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
-        return MetadataStage(connection).process(candidate).as_payload()
+        result = MetadataStage(connection).process(candidate)
+    if not result.duplicate and result.tier in (1, 2):
+        from app.bodies import process_article
+
+        process_article.delay(str(result.article_id))  # T21: tier 1 body, tier 2 embedding
+    return result.as_payload()
 
 
 @celery_app.task(name="app.discovery.poll_sources")
