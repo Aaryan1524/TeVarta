@@ -189,3 +189,46 @@ def test_industry_enrichment_failure_never_blocks_onboarding(migrated_dsn, graph
         assert connection.execute(
             "SELECT status FROM entity_graph_views WHERE entity_id = %s", (ids["tsmc"],)
         ).fetchone() == ("ready",)
+
+
+def test_prewarm_promotes_every_listed_entity_and_reports_gaps(migrated_dsn, graph, world):
+    from app.prewarm import prewarm
+
+    ids, _ = world
+    with psycopg.connect(migrated_dsn) as connection:
+        for name in ("tsmc", "nvda"):
+            connection.execute(
+                "INSERT INTO entity_aliases VALUES (%s, %s, 'test', 1, true)",
+                (f"ticker:p2{name}{ids[name][-6:]}", ids[name]),
+            )
+        connection.commit()
+        expander = EntityExpander(connection, graph, FixedIndustry())
+        listed = [ids["tsmc"], ids["nvda"]]
+        first = {item.entity_id: item for item in prewarm(connection, expander, listed)}
+        again = {item.entity_id: item for item in prewarm(connection, expander, listed)}
+
+    tsmc, nvda = first[ids["tsmc"]], first[ids["nvda"]]
+    assert tsmc.live and tsmc.view == "ready" and tsmc.dependency_edges == 1 and not tsmc.gap
+    # NVIDIA's only edge is to TSMC, which is upstream: it is reached, so no gap either.
+    assert nvda.live and nvda.dependency_edges >= 1
+    assert again == first  # idempotent: same views, same coverage
+    with psycopg.connect(migrated_dsn) as connection:
+        assert connection.execute(
+            """SELECT status, count(*) FROM entity_expansion_requests
+               WHERE entity_id = ANY(%s) GROUP BY 1""", (listed,),
+        ).fetchall() == [("complete", 2)]
+
+
+def test_prewarm_reports_an_entity_without_dependencies_as_a_gap(migrated_dsn, graph, world):
+    from app.prewarm import prewarm
+
+    ids, _ = world
+    with psycopg.connect(migrated_dsn) as connection:
+        connection.execute(
+            """INSERT INTO entities (entity_id, canonical_name, type)
+               VALUES ('ent_p2_lonely', 'Lonely Co', 'Company')
+               ON CONFLICT (entity_id) DO NOTHING"""
+        )
+        connection.commit()
+        (item,) = prewarm(connection, EntityExpander(connection, graph, None), ["ent_p2_lonely"])
+    assert (item.live, item.view, item.dependency_edges, item.gap) == (True, "ready", 0, True)

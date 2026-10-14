@@ -1,0 +1,57 @@
+# T24 pre-warm list (MVP §6.3): likely early seeds, promoted to live with the same
+# expansion machinery before the first signup so onboarding is instant. The first 30
+# are the T01 curation targets; the rest are widely held US names. Reorder from the
+# waitlist survey or the first 25 real seeds (decisions.md, 2026-09-12 targets).
+entities:
+  # T01 curation targets
+  - AAPL
+  - NVDA
+  - MSFT
+  - AMZN
+  - GOOGL
+  - META
+  - TSLA
+  - AVGO
+  - AMD
+  - QCOM
+  - INTC
+  - MU
+  - TSM
+  - ASML
+  - AMAT
+  - LRCX
+  - KLAC
+  - SNPS
+  - CDNS
+  - MRVL
+  - CSCO
+  - ORCL
+  - CRM
+  - SNDK
+  - JPM
+  - V
+  - MA
+  - XOM
+  - BA
+  - UNH
+  # Widely held US names
+  - BRK-B
+  - NFLX
+  - COST
+  - WMT
+  - KO
+  - PEP
+  - JNJ
+  - LLY
+  - PFE
+  - HD
+  - DIS
+  - NKE
+  - SBUX
+  - UBER
+  - PLTR
+  - ADBE
+  - IBM
+  - ARM
+  - GS
+  - CVX

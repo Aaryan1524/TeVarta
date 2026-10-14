@@ -52,6 +52,25 @@ def normalize_alias(value: str) -> str:
     return normalized
 
 
+# SEC titles often end in a state-of-incorporation tag: "APPLIED MATERIALS INC /DE",
+# "QUALCOMM INC/DE", "CACI INTERNATIONAL INC /DE/". News never writes it.
+STATE_TAG = re.compile(r"\s*/[A-Z]{2,3}/?\s*$")
+
+
+def name_aliases(canonical_name: str) -> tuple[str, ...]:
+    """The SEC title's alias, plus one without a trailing state tag when present."""
+    aliases = [normalize_alias(canonical_name)]
+    stripped = STATE_TAG.sub("", canonical_name)
+    if stripped != canonical_name and stripped.strip():
+        try:
+            alias = normalize_alias(stripped)
+        except CatalogInputError:
+            alias = None
+        if alias and alias not in aliases:
+            aliases.append(alias)
+    return tuple(aliases)
+
+
 def parse_company_tickers(payload: dict[str, Any]) -> tuple[CompanyTicker, ...]:
     """Parse SEC's numbered object while rejecting ambiguous identities.
 
@@ -135,7 +154,7 @@ def import_sec_catalog(
             aliases = (
                 (f"cik:{company.cik}", True),
                 *((f"ticker:{ticker.casefold()}", True) for ticker in company.tickers),
-                (normalize_alias(company.canonical_name), False),
+                *((name, False) for name in name_aliases(company.canonical_name)),
             )
             for alias, identifier in aliases:
                 connection.execute(

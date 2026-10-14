@@ -249,6 +249,31 @@ def finish_request(connection: psycopg.Connection[Any], claim: Claim,
     return new_status
 
 
+def request_expansion(connection: psycopg.Connection[Any], entity_ids: Sequence[str]) -> int:
+    """Queue (or re-queue) expansion for specific entities, e.g. pre-warm (T24).
+
+    Same generation rule as republish: a running request finishes pending instead
+    of complete, so nothing requested here is lost.
+    """
+    with connection.transaction():
+        rows = connection.execute(
+            """INSERT INTO entity_expansion_requests (entity_id)
+               SELECT unnest(%s::text[])
+               ON CONFLICT (entity_id) DO UPDATE
+               SET generation = entity_expansion_requests.generation + 1,
+                   requested_at = now(),
+                   status = CASE WHEN entity_expansion_requests.status = 'running'
+                                 THEN 'running' ELSE 'pending' END,
+                   attempts = CASE WHEN entity_expansion_requests.status = 'running'
+                                   THEN entity_expansion_requests.attempts ELSE 0 END,
+                   last_error = CASE WHEN entity_expansion_requests.status = 'running'
+                                     THEN entity_expansion_requests.last_error END
+               RETURNING entity_id""",
+            (list(entity_ids),),
+        ).fetchall()
+    return len(rows)
+
+
 def request_republish(connection: psycopg.Connection[Any],
                       entity_ids: Sequence[str] | None = None) -> int:
     """Re-queue published views (all, or the given roots) after graph changes.
@@ -360,6 +385,18 @@ class EntityExpander:
                    SET status = 'ready', graph_json = EXCLUDED.graph_json, updated_at = now()""",
                 (entity_id, Jsonb(view)),
             )
+        if industry_status == "added":
+            # A new edge inside other roots' neighbourhoods: rebuild the views that show
+            # this entity so every view converges on the current graph.
+            containing = [row[0] for row in self.connection.execute(
+                """SELECT entity_id FROM entity_graph_views
+                   WHERE entity_id <> %s AND status = 'ready'
+                     AND graph_json->'nodes' @> %s::jsonb""",
+                (entity_id, json.dumps([{"id": entity_id}])),
+            ).fetchall()]
+            self.connection.commit()
+            if containing:
+                request_republish(self.connection, containing)
         search_status = self._targeted_search(entity_id, name)
         report = ExpansionReport(entity_id, len(neighborhood.reached), len(neighborhood.edges),
                                  neighborhood.max_hop, promoted, industry_status, search_status)

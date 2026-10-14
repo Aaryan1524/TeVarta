@@ -1,0 +1,49 @@
+# Reviewed short names for catalog entities (T24, MVP §6.1 "deeply resolved: aliases").
+# SEC titles make poor surface forms: "AMAZON COM INC" → `amazoncom`, "ASML HOLDING NV"
+# → `asmlholdingnv`. Each entry names the entity strictly (ticker, CIK, or entity_id) and
+# the names news uses. Avoid common words; an alias that already names another entity
+# is refused unless `shared: true` says both are intended. Loaded by
+# `scripts/prewarm.py`; reviewed in PRs like code.
+aliases:
+  - entity: AMZN
+    names: [Amazon]
+    rationale: SEC title is "AMAZON COM INC"; news writes Amazon.
+  - entity: GOOGL
+    names: [Google]
+    rationale: Alphabet's operating brand; most coverage names Google.
+  - entity: META
+    names: [Meta]
+    rationale: News writes Meta for Meta Platforms. Capitalized-span tagging keeps "meta-analysis" out.
+  - entity: AMD
+    names: [AMD]
+    rationale: News writes AMD; SEC title is "ADVANCED MICRO DEVICES INC".
+  - entity: QCOM
+    names: [Qualcomm]
+    rationale: SEC title "QUALCOMM INC/DE" carries a state tag.
+  - entity: MU
+    names: [Micron]
+    rationale: News writes Micron for Micron Technology.
+  - entity: TSM
+    names: [TSMC, Taiwan Semiconductor]
+    rationale: The common short names for Taiwan Semiconductor Manufacturing Co.
+  - entity: ASML
+    names: [ASML]
+    rationale: SEC title is "ASML HOLDING NV"; news writes ASML.
+  - entity: MRVL
+    names: [Marvell]
+    rationale: News writes Marvell for Marvell Technology.
+  - entity: CSCO
+    names: [Cisco]
+    rationale: SEC title is "CISCO SYSTEMS, INC."; news writes Cisco.
+  - entity: JPM
+    names: [JPMorgan]
+    rationale: News writes JPMorgan; SEC title is "JPMORGAN CHASE & CO".
+  - entity: XOM
+    names: [Exxon, ExxonMobil]
+    rationale: News writes Exxon or ExxonMobil.
+  - entity: UNH
+    names: [UnitedHealth]
+    rationale: News writes UnitedHealth for UnitedHealth Group.
+  - entity: CDNS
+    names: [Cadence Design]
+    rationale: '"Cadence" alone is a common word and another company; use the two-word form.'
