@@ -270,3 +270,66 @@ def test_federal_register_documents_are_read_from_their_full_text_path():
     agent = "TeVarta/1.0 (ops@tevarta.com)"
     body = BodyFetcher(web, RobotsPolicy(web, agent, now=lambda: NOW), agent).fetch(page)
     assert body.startswith("Proclamation text.") and page not in [u for u, _ in web.requests]
+
+
+class RedirectingWeb(FakeWeb):
+    """FakeWeb whose entries may be Redirect(location), as http_get raises on a 3xx."""
+
+    def __call__(self, url, headers):
+        self.requests.append((url, dict(headers)))
+        page = self.pages.get(url, (404, "text/plain", b""))
+        if isinstance(page, Exception):
+            raise page
+        return page
+
+
+def redirecting_fetcher(pages, allow_url=None):
+    web = RedirectingWeb(pages)
+    agent = "TeVarta/1.0 (ops@tevarta.com)"
+    robots = RobotsPolicy(web, agent, now=lambda: NOW, allow_url=allow_url)
+    return BodyFetcher(web, robots, agent, allow_url=allow_url), web
+
+
+def test_redirects_are_followed_with_robots_checked_on_every_hop():
+    from app.bodies import Redirect
+
+    ok = (200, "text/plain", b"")
+    page = (200, "text/html", f"<p>Moved story.{DETAIL}</p>".encode())
+    body_fetcher, web = redirecting_fetcher({
+        "https://news.example.org/robots.txt": ok, "https://cdn.example.net/robots.txt": ok,
+        "https://news.example.org/a": Redirect("https://cdn.example.net/story"),
+        "https://cdn.example.net/story": page})
+    assert body_fetcher.fetch("https://news.example.org/a").startswith("Moved story.")
+    assert "https://cdn.example.net/robots.txt" in [url for url, _ in web.requests]
+
+
+def test_a_redirect_to_a_disallowed_host_is_never_requested():
+    from app.bodies import Redirect
+
+    body_fetcher, web = redirecting_fetcher({
+        "https://news.example.org/robots.txt": (200, "text/plain", b""),
+        "https://news.example.org/a": Redirect("http://169.254.169.254/latest/meta-data/")},
+        allow_url=lambda url: "169.254" not in url)
+    with pytest.raises(BodyFetchRefused, match="public"):
+        body_fetcher.fetch("https://news.example.org/a")
+    assert all("169.254" not in url for url, _ in web.requests)
+
+
+def test_redirect_loops_stop():
+    from app.bodies import Redirect
+
+    body_fetcher, _ = redirecting_fetcher({
+        "https://news.example.org/robots.txt": (200, "text/plain", b""),
+        "https://news.example.org/a": Redirect("https://news.example.org/a")})
+    with pytest.raises(BodyFetchRefused, match="too many redirects"):
+        body_fetcher.fetch("https://news.example.org/a")
+
+
+@pytest.mark.parametrize(("url", "public"), [
+    ("http://127.0.0.1/x", False), ("http://169.254.169.254/latest", False),
+    ("http://10.0.0.5/x", False), ("http://[::1]/x", False), ("ftp://example.org/x", False),
+    ("file:///etc/passwd", False), ("http://localhost/x", False)])
+def test_non_public_destinations_are_rejected(url, public):
+    from app.bodies import is_public_url
+
+    assert is_public_url(url) is public

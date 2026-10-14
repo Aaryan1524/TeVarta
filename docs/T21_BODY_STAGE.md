@@ -89,3 +89,21 @@ fixture showed:
 | A tier-1 article with no usable body had no embedding, so it could not be clustered | Fall back to a title+snippet embedding (never for the audit sample) |
 | `<head>` and XML markup leaked into body text | `<head>` dropped; XML stripped like HTML |
 
+
+## Fetch safety (SSRF)
+
+A search result is attacker-influenced, so the fetcher never trusts a URL:
+- `http_get` does not follow redirects; a 3xx raises `Redirect`, and the fetcher follows
+  at most 3 hops itself.
+- Every hop must be http(s) to a host whose addresses are all public
+  (`is_public_url`): loopback, private, link-local (cloud metadata) and reserved
+  ranges are refused. robots.txt is re-checked on every hop, and robots.txt's own
+  redirects are vetted the same way.
+- Verified live: `169.254.169.254` and `127.0.0.1` are refused; an http→https redirect
+  on federalreserve.gov is followed.
+
+## Audit samples from primary sources
+
+Every activatable source is `tier_value ≥ 0.9`, so tier 3 always routes to `override`
+and the §17 tier-3 audit would never sample. A tier-3 article in the 5% sample now has
+its original tier audited (`recall_audit`) before any override promotion.

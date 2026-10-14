@@ -213,7 +213,7 @@ def test_celery_task_commits_the_tiered_article(migrated_dsn, monkeypatch):
     replay = process_candidate.run(entry)
 
     assert (first["tier"], first["duplicate"], replay["duplicate"]) == (3, False, True)
-    assert queued == ([(first["article_id"], "audit")] if first["body_mode"] else [])
+    assert queued == ([(first["article_id"], "audit", True)] if first["body_mode"] else [])
     with psycopg.connect(migrated_dsn) as check:
         assert check.execute(
             "SELECT tier FROM articles WHERE public_id = %s", (first["public_id"],)

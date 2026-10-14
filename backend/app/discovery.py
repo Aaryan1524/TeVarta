@@ -532,7 +532,8 @@ def process_candidate(candidate: dict[str, object]) -> dict[str, object]:
     if mode is not None:
         from app.bodies import process_article
 
-        process_article.delay(str(result.article_id), mode)  # T21/T22 body stage
+        sampled = audit_sampled(result.url_hash) and result.tier == 3
+        process_article.delay(str(result.article_id), mode, sampled)  # T21/T22 body stage
     return {**result.as_payload(), "body_mode": mode}
 
 
