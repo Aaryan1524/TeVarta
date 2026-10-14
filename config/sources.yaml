@@ -10,7 +10,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: atom
     access_note: "Use the SEC-required descriptive User-Agent and stay within SEC rate limits."
     evidence_url: "https://www.sec.gov/search-filings"
@@ -23,7 +23,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: atom
     access_note: "Use the SEC-required descriptive User-Agent and stay within SEC rate limits."
     evidence_url: "https://www.sec.gov/search-filings"
@@ -35,7 +35,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: json_api
     evidence_url: "https://www.federalregister.gov/developers/documentation/api/v1"
 
@@ -46,7 +46,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: rss
     evidence_url: "https://www.federalreserve.gov/feeds/feeds.htm"
 
@@ -69,7 +69,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: rss
     evidence_url: "https://www.cftc.gov/RSS/index.htm"
 
@@ -80,7 +80,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: json_api
     evidence_url: "https://www.justice.gov/developer/api-documentation/api_v1"
 
@@ -91,7 +91,7 @@ sources:
     tier_value: 1.0
     reliability: 0.98
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: rss
     evidence_url: "https://www.eia.gov/tools/rssfeeds/"
 
@@ -102,7 +102,7 @@ sources:
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
-    active: false
+    active: true
     ingestion_mode: atom
     evidence_url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/"
 

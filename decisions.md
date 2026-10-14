@@ -63,3 +63,4 @@ The frozen MVP remains the source of truth. This log records implementation choi
 
 
 
+2026-10-14 — T19 sources activated (Aaryan) — Active: SEC current 8-K and 6-K, Federal Register, Federal Reserve, CFTC, DOJ, EIA, USGS (all tier_value 1.0, validated live, robots-allowed). Still off: ECB, Bank of England and the Apple/Microsoft/NVIDIA/Meta newsrooms (terms unread), Treasury (no feed), NOAA (robots disallow), licensed wires — Aaryan; Aaditya to confirm; evidence in docs/T19_SOURCE_VALIDATION.md.
