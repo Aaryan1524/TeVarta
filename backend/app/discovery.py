@@ -507,14 +507,17 @@ def _configured_search_service() -> SearchService:
 def process_candidate(candidate: dict[str, object]) -> dict[str, object]:
     """T20 metadata stage: dedupe, tag, and tier one candidate. Never fetches a body."""
     from app.ingest import MetadataStage
+    from app.quarantine import audit_sampled, body_mode
 
     with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
         result = MetadataStage(connection).process(candidate)
-    if not result.duplicate and result.tier in (1, 2):
+    mode = None if result.duplicate or result.tier is None else body_mode(
+        result.tier, result.tier_value, audit_sampled(result.url_hash))
+    if mode is not None:
         from app.bodies import process_article
 
-        process_article.delay(str(result.article_id))  # T21: tier 1 body, tier 2 embedding
-    return result.as_payload()
+        process_article.delay(str(result.article_id), mode)  # T21/T22 body stage
+    return {**result.as_payload(), "body_mode": mode}
 
 
 @celery_app.task(name="app.discovery.poll_sources")

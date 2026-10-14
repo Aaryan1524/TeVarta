@@ -176,13 +176,13 @@ def test_tier_three_gets_nothing(catalog, tmp_path):
 
 
 def test_a_forced_fetch_keeps_the_tier_embedding_policy(catalog, tmp_path):
-    # T22's high-tier override or audit sample fetches a tier-3 body: no embedding.
+    # T22's audit sample fetches a tier-3 body: never embedded.
     article_id, url, _ = article(catalog, "Agency posts routine notice")
     embedder = Embedder()
     connection, body_stage, _ = stage(catalog, tmp_path, {url: unique_body()}, embedder)
     with connection:
-        result = body_stage.process(article_id, fetch=True)
-    assert (result.fetched, result.embedding) == ("stored", "none")
+        result = body_stage.process(article_id, mode="audit")
+    assert (result.fetched, result.embedding, result.audited) == ("stored", "none", True)
     assert embedder.calls == [] and row(catalog, article_id)[3:] == (None, None)
 
 
@@ -217,21 +217,30 @@ def test_missing_or_failing_embedder_still_stores_the_body(catalog, tmp_path):
     assert usage(catalog, "embeddings", "failure")[0] == failures_before + 1
 
 
+def unsampled_url():
+    from app.ingest import url_hash
+    from app.quarantine import audit_sampled
+
+    while True:
+        url = f"https://news.example.org/{uuid4().hex}"
+        if not audit_sampled(url_hash(url)):
+            return url
+
+
 def test_metadata_stage_hands_tier_one_and_two_to_the_body_stage(catalog, monkeypatch):
     from app import bodies
     from app.discovery import process_candidate
 
     queued = []
-    monkeypatch.setattr(bodies.process_article, "delay", queued.append)
+    monkeypatch.setattr(bodies.process_article, "delay", lambda *args: queued.append(args))
     monkeypatch.setenv("TEVARTA_POSTGRES_URL", catalog)
 
     def run(title):
         return process_candidate.run({
-            "url": f"https://news.example.org/{uuid4().hex}", "title": title, "snippet": None,
-            "publisher": "t21", "published_at": "2026-10-13T08:00:00Z",
-            "source_hint": "t21_feed"})
+            "url": unsampled_url(), "title": title, "snippet": None, "publisher": "t21",
+            "published_at": "2026-10-13T08:00:00Z", "source_hint": "t21_feed"})
 
     tier_one, tier_two, tier_three = (run("Taiwan floods"), run("SanDisk news"),
                                       run("Quiet markets"))
-    assert queued == [tier_one["article_id"], tier_two["article_id"]]
-    assert tier_three["tier"] == 3
+    assert queued == [(tier_one["article_id"], "default"), (tier_two["article_id"], "default")]
+    assert (tier_three["tier"], tier_three["body_mode"]) == (3, None)

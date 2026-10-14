@@ -76,6 +76,7 @@ TABLES = {
     "search_budget_alerts",
     "entity_expansion_requests",
     "entity_graph_views",
+    "seen_urls",
 }
 
 
@@ -401,7 +402,7 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0005_expansion_lifecycle"
+                == "0006_article_ingested_at"
             )
     finally:
         engine.dispose()
@@ -688,7 +689,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0005_expansion_lifecycle"
+                == "0006_article_ingested_at"
             )
     finally:
         engine.dispose()

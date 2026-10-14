@@ -12,7 +12,7 @@ import html
 import json
 import logging
 import re
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -392,6 +392,7 @@ class MetadataResult:
     source_id: str
     tier_value: float
     entity_ids: tuple[str, ...]
+    url_hash: str = ""
 
     def as_payload(self) -> dict[str, object]:
         return {
@@ -420,8 +421,9 @@ def _published_at(value: object) -> datetime:
 class MetadataStage:
     """Discovery candidate → deduped, tagged, tiered `articles` row. Never fetches."""
 
-    def __init__(self, connection: psycopg.Connection[Any]) -> None:
-        self.connection = connection
+    def __init__(self, connection: psycopg.Connection[Any],
+                 now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+        self.connection, self.now = connection, now
         self.tagger = MetadataTagger(PostgresAliasIndex(connection))
 
     def process(self, candidate: Mapping[str, object]) -> MetadataResult:
@@ -440,10 +442,13 @@ class MetadataStage:
 
         with self.connection.transaction():
             source = resolve_source(self.connection, hint)
-            existing = self.connection.execute(
-                "SELECT 1 FROM articles WHERE url_hash = %s", (key,)
+            # The tombstone outlives the article's own retention, so a purged article is
+            # not re-ingested (or its body re-fetched) while a feed still lists it.
+            first = self.connection.execute(
+                "INSERT INTO seen_urls (url_hash, first_seen) VALUES (%s, %s) "
+                "ON CONFLICT (url_hash) DO NOTHING RETURNING 1", (key, self.now()),
             ).fetchone()
-            if existing:
+            if first is None:
                 return MetadataResult(None, None, True, None, source.id, source.tier_value, ())
             tagging = self.tagger.tag(title, snippet, source.domain)
             tier = tagging.tier
@@ -473,10 +478,16 @@ class MetadataStage:
                      json.dumps({"candidates": list(ambiguity.candidates), "stage": "metadata"}),
                      article_id),
                 )
+            if tier == 2:
+                from app.quarantine import quarantine_article
+
+                quarantine_article(self.connection, article_id,
+                                   tuple(entity.entity_id for entity in tagging.entities),
+                                   self.now())
         logger.info(
             "article tiered",
             extra={"article_public_id": public_id, "tier": tier, "source_id": source.id,
                    "entity_count": len(tagging.entities)},
         )
         return MetadataResult(article_id, public_id, False, tier, source.id, source.tier_value,
-                              tuple(entity.entity_id for entity in tagging.entities))
+                              tuple(entity.entity_id for entity in tagging.entities), key)

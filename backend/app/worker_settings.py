@@ -6,7 +6,7 @@ task_always_eager = os.getenv("TEVARTA_CELERY_EAGER", "false").lower() == "true"
 task_serializer = "json"
 result_serializer = "json"
 accept_content = ["json"]
-imports = ("app.discovery", "app.expansion", "app.bodies")
+imports = ("app.discovery", "app.expansion", "app.bodies", "app.quarantine")
 beat_schedule = {
     "poll-sources-every-five-minutes": {
         "task": "app.discovery.poll_sources",
@@ -15,6 +15,10 @@ beat_schedule = {
     "dispatch-entity-expansions": {
         "task": "app.expansion.dispatch_expansions",
         "schedule": 15.0,
+    },
+    "purge-expired-articles-hourly": {
+        "task": "app.quarantine.purge_expired_articles",
+        "schedule": 3600.0,
     },
     "entity-sweep-daily": {
         "task": "app.discovery.entity_sweep",
