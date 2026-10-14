@@ -41,7 +41,9 @@ Migration 0006 adds `articles.ingested_at`. The hourly
 
 measured from ingestion. It keeps any article that is audited or referenced by an
 event or a claim. Measuring from `published_at` would purge an old article as soon
-as it was discovered, and the feed would then re-ingest it on every poll.
+as it was discovered. Purged articles leave a `seen_urls` tombstone (URL hash only,
+kept 30 days), so a feed that still lists the item for days is not re-ingested and
+its body is not fetched again every 48 hours.
 
 ## Weekly review
 

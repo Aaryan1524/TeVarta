@@ -214,3 +214,29 @@ def test_ingested_at_migration_roundtrip(database_factory):
         command.downgrade(alembic_config(connection), "0005_expansion_lifecycle")
         command.upgrade(alembic_config(connection), "head")
     engine.dispose()
+
+
+def test_a_purged_article_is_not_reingested_while_its_feed_still_lists_it(dsn):
+    url = f"https://news.example.org/{uuid4().hex}"
+    entry = {"url": url, "title": "Quiet regional update", "snippet": None, "publisher": "t22",
+             "published_at": NOW.isoformat(), "source_hint": "t22_feed"}
+
+    def process(now):
+        with psycopg.connect(dsn) as connection:
+            return MetadataStage(connection, now=lambda: now).process(dict(entry))
+
+    first = process(NOW)
+    assert not first.duplicate and first.tier == 3
+    later = NOW + timedelta(hours=49)
+    with psycopg.connect(dsn) as connection:
+        connection.execute("UPDATE articles SET ingested_at = %s WHERE id = %s",
+                           (NOW - timedelta(hours=1) - timedelta(hours=48), first.article_id))
+        assert purge_expired(connection, later).tier3 >= 1
+    assert one(dsn, "SELECT count(*) FROM articles WHERE url = %s", url) == (0,)
+    again = process(later)  # the next poll: the feed still lists the item
+    assert again.duplicate and again.article_id is None
+    assert one(dsn, "SELECT count(*) FROM articles WHERE url = %s", url) == (0,)
+    # The tombstone expires on its own clock, so the table cannot grow without bound.
+    with psycopg.connect(dsn) as connection:
+        assert purge_expired(connection, NOW + timedelta(days=31)).tombstones >= 1
+    assert process(NOW + timedelta(days=31)).duplicate is False
