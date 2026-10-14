@@ -35,4 +35,21 @@ entities:
   aliases:
   - Samsung Electronics
   - Samsung Electronics Co Ltd
+- entity_id: ent_cur_panasonic
+  canonical_name: Panasonic Holdings Corporation
+  type: Company
+  aliases:
+  - Panasonic
+  - Panasonic Holdings
+- entity_id: ent_cur_catl
+  canonical_name: Contemporary Amperex Technology Co. Limited
+  type: Company
+  aliases:
+  - CATL
+  - Contemporary Amperex Technology
+- entity_id: ent_cur_openai
+  canonical_name: OpenAI
+  type: Company
+  aliases:
+  - OpenAI
 edges: []
