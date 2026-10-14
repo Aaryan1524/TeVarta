@@ -224,7 +224,8 @@ def test_routing_sends_primary_sources_and_the_sample_to_the_body_stage(dsn, mon
     primary = run("Agency notice", "t22_sec", False)
     sampled = run("Quiet sampled day", "t22_feed", True)
     skipped = run("Quiet unsampled day", "t22_feed", False)
-    assert queued == [(primary["article_id"], "override"), (sampled["article_id"], "audit")]
+    assert queued == [(primary["article_id"], "override", False),
+                      (sampled["article_id"], "audit", True)]
     assert skipped["body_mode"] is None
 
 
@@ -262,3 +263,19 @@ def test_a_purged_article_is_not_reingested_while_its_feed_still_lists_it(dsn):
     with psycopg.connect(dsn) as connection:
         assert purge_expired(connection, NOW + timedelta(days=31)).tombstones >= 1
     assert process(NOW + timedelta(days=31)).duplicate is False
+
+
+def test_a_sampled_tier_three_primary_article_is_audited_before_it_can_be_promoted(
+        dsn, tmp_path):
+    # Every activatable source is tier_value >= 0.9, so audit samples arrive as override.
+    filing = ingest(dsn, "Agency posts a routine notice", source="t22_sec")
+    assert filing.tier == 3
+    connection, stage = body_stage(
+        dsn, tmp_path, "TSMC said supply was disrupted. TSMC expects delays. "
+                       "Customers of TSMC were told.")
+    with connection:
+        result = stage.process(filing.article_id, mode="override", sampled=True)
+    assert (result.audited, result.promoted, result.tier) == (True, True, 1)
+    assert one(dsn, "SELECT tier_assigned, entities_found_in_body FROM recall_audit "
+                    "WHERE article_id = %s", filing.article_id) == (3, ["ent_t22_tsmc"])
+    assert one(dsn, "SELECT tier FROM articles WHERE id = %s", filing.article_id) == (1,)

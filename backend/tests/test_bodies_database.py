@@ -258,5 +258,6 @@ def test_metadata_stage_hands_tier_one_and_two_to_the_body_stage(catalog, monkey
 
     tier_one, tier_two, tier_three = (run("Taiwan floods"), run("SanDisk news"),
                                       run("Quiet markets"))
-    assert queued == [(tier_one["article_id"], "default"), (tier_two["article_id"], "default")]
+    assert queued == [(tier_one["article_id"], "default", False),
+                      (tier_two["article_id"], "default", False)]
     assert (tier_three["tier"], tier_three["body_mode"]) == (3, None)

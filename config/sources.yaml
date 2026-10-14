@@ -5,7 +5,7 @@ sources:
   - id: sec_current_filings
     domain: sec.gov
     # 8-Ks only: the all-forms feed is dominated by insider Form 4s. Fast path (§8.1).
-    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=40&output=atom"
+    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=100&output=atom"
     publisher_group: us_sec
     tier_value: 1.0
     reliability: 0.99
@@ -18,7 +18,7 @@ sources:
   - id: sec_current_6k
     domain: sec.gov
     # Foreign private issuers (TSMC, ASML) report current events on 6-K, not 8-K.
-    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=6-K&count=40&output=atom"
+    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=6-K&count=100&output=atom"
     publisher_group: us_sec
     tier_value: 1.0
     reliability: 0.99

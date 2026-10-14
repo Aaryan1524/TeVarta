@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Any, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 from uuid import UUID, uuid4
 
@@ -34,6 +34,7 @@ from app.worker import celery_app
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 3_000_000
+MAX_REDIRECTS = 3
 MAX_STORED_CHARS = 200_000
 MAX_TAGGED_CHARS = 20_000
 MAX_EMBEDDED_CHARS = 24_000  # ~6k tokens, inside the model's 8,191-token input
@@ -80,28 +81,77 @@ class HttpGet(Protocol):
     def __call__(self, url: str, headers: Mapping[str, str]) -> tuple[int, str, bytes]: ...
 
 
+class Redirect(Exception):
+    """A 3xx response; the fetcher follows it hop by hop so every hop is vetted."""
+
+    def __init__(self, location: str) -> None:
+        super().__init__(location)
+        self.location = location
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise Redirect(newurl)
+
+
 def http_get(url: str, headers: Mapping[str, str]) -> tuple[int, str, bytes]:
-    """Status, content type, and at most MAX_BODY_BYTES of the response."""
+    """Status, content type, and at most MAX_BODY_BYTES of the response.
+
+    Redirects are not followed here: a 3xx raises Redirect so the caller can re-check
+    robots.txt and the destination address on every hop.
+    """
     from app.discovery import tls_context
 
+    opener = urllib.request.build_opener(
+        _NoRedirect, urllib.request.HTTPSHandler(context=tls_context()))
     request = urllib.request.Request(url, headers=dict(headers))
     try:
-        with urllib.request.urlopen(  # nosec B310
-            request, timeout=20, context=tls_context()
-        ) as response:
+        with opener.open(request, timeout=20) as response:  # nosec B310
             return (response.status, response.headers.get("Content-Type", ""),
                     response.read(MAX_BODY_BYTES))
     except urllib.error.HTTPError as error:
         return error.code, error.headers.get("Content-Type", "") if error.headers else "", b""
 
 
+def is_public_url(url: str) -> bool:
+    """https/http to a host whose every address is public: blocks SSRF to private,
+    loopback, link-local (cloud metadata) and reserved ranges."""
+    import ipaddress
+    import socket
+
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return False
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(parts.hostname, parts.port or 443)}
+    except OSError:
+        return False
+    return bool(addresses) and all(ipaddress.ip_address(a).is_global for a in addresses)
+
+
 class RobotsPolicy:
     """Per-host robots.txt, cached for a day. 401/403 disallow; other 4xx allow."""
 
     def __init__(self, get: HttpGet, user_agent: str,
-                 now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+                 now: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 allow_url: Callable[[str], bool] | None = None) -> None:
         self.get, self.user_agent, self.now = get, user_agent, now
+        self.allow_url = allow_url
         self._cache: dict[str, tuple[datetime, RobotFileParser]] = {}
+
+    def _fetch_robots(self, url: str) -> tuple[int, bytes]:
+        """robots.txt often redirects (http→https, apex→www); follow a few hops. A hop
+        that is not public http(s), or a redirect loop, means "unknown": disallow."""
+        for _ in range(MAX_REDIRECTS + 1):
+            try:
+                status, _, content = self.get(url, {"User-Agent": self.user_agent})
+            except Redirect as redirect:
+                url = urljoin(url, redirect.location)
+                if self.allow_url is not None and not self.allow_url(url):
+                    return 503, b""
+                continue
+            return status, content
+        return 503, b""
 
     def allowed(self, url: str) -> bool:
         parts = urlsplit(url)
@@ -109,8 +159,7 @@ class RobotsPolicy:
         cached = self._cache.get(origin)
         if cached is None or self.now() - cached[0] > timedelta(days=1):
             parser = RobotFileParser()
-            status, _, content = self.get(f"{origin}/robots.txt",
-                                          {"User-Agent": self.user_agent})
+            status, content = self._fetch_robots(f"{origin}/robots.txt")
             if status in (401, 403):
                 parser.disallow_all = True
             elif status >= 500:
@@ -190,9 +239,12 @@ def federal_register_text_url(url: str) -> str | None:
             f"{year}/{month}/{day}/{number}.txt")
 
 
+
 class BodyFetcher:
-    def __init__(self, get: HttpGet, robots: RobotsPolicy, user_agent: str) -> None:
+    def __init__(self, get: HttpGet, robots: RobotsPolicy, user_agent: str,
+                 allow_url: Callable[[str], bool] | None = None) -> None:
         self.get, self.robots, self.user_agent = get, robots, user_agent
+        self.allow_url = allow_url
 
     def fetch(self, url: str) -> str:
         url = federal_register_text_url(url) or url
@@ -215,10 +267,20 @@ class BodyFetcher:
         return text
 
     def _get(self, url: str) -> tuple[str, bytes]:
-        if not self.robots.allowed(url):
-            raise BodyFetchRefused("robots.txt disallows this URL")
-        status, content_type, content = self.get(
-            url, {"User-Agent": self.user_agent, "Accept": "text/html, text/plain"})
+        for _ in range(MAX_REDIRECTS + 1):
+            if self.allow_url is not None and not self.allow_url(url):
+                raise BodyFetchRefused("destination is not a public http(s) address")
+            if not self.robots.allowed(url):
+                raise BodyFetchRefused("robots.txt disallows this URL")
+            try:
+                status, content_type, content = self.get(
+                    url, {"User-Agent": self.user_agent, "Accept": "text/html, text/plain"})
+            except Redirect as redirect:
+                url = urljoin(url, redirect.location)
+                continue
+            break
+        else:
+            raise BodyFetchRefused("too many redirects")
         if status != 200:
             raise BodyFetchRefused(f"HTTP {status}")
         kind = content_type.lower()
@@ -358,7 +420,8 @@ class BodyStage:
         self.embedder, self.now = embedder, now
         self.tagger = MetadataTagger(PostgresAliasIndex(connection))
 
-    def process(self, article_id: UUID | str, *, mode: str = "default") -> BodyResult:
+    def process(self, article_id: UUID | str, *, mode: str = "default",
+                sampled: bool = False) -> BodyResult:
         """Apply the tier's treatment.
 
         default  — §7.2: tier 1 body, tier 2 title+snippet embedding, tier 3 nothing.
@@ -366,6 +429,10 @@ class BodyStage:
                    the article to tier 1 so primary sources can reach the fast path.
         audit    — T22 5% tier-3 sample: fetch and record what the body reveals in
                    recall_audit; never promoted or embedded, so the measurement is pure.
+        sampled  — the article is in the 5% tier-3 sample but its source is a primary
+                   one (override). Its original tier-3 assignment is audited before any
+                   promotion; otherwise §17 would get no samples when every source is
+                   tier_value >= 0.9.
         """
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -397,9 +464,9 @@ class BodyStage:
         original = self._near_duplicate(article_id, fingerprint, published_at, title)
         found, added = self._tag_body(article_id, text, domain)
         audited = promoted = False
-        if mode == "audit":
+        if mode == "audit" or (sampled and tier == 3):
             audited = self._record_audit(article_id, tier, found)
-        elif mode == "override" and tier != 1 and self._names_live_subject(found):
+        if mode == "override" and tier != 1 and self._names_live_subject(found):
             self._promote(article_id)
             tier, promoted = 1, True
 
@@ -566,7 +633,8 @@ def body_stage_from_env(connection: psycopg.Connection[Any]) -> BodyStage:
     try:
         user_agent = declared_user_agent()
         if store_dir:
-            fetcher = BodyFetcher(http_get, RobotsPolicy(http_get, user_agent), user_agent)
+            robots = RobotsPolicy(http_get, user_agent, allow_url=is_public_url)
+            fetcher = BodyFetcher(http_get, robots, user_agent, allow_url=is_public_url)
     except DiscoveryConfigurationError:
         fetcher = None
     try:
@@ -578,6 +646,8 @@ def body_stage_from_env(connection: psycopg.Connection[Any]) -> BodyStage:
 
 
 @celery_app.task(name="app.bodies.process_article")
-def process_article(article_id: str, mode: str = "default") -> dict[str, object]:
+def process_article(article_id: str, mode: str = "default",
+                    sampled: bool = False) -> dict[str, object]:
     with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
-        return body_stage_from_env(connection).process(article_id, mode=mode).as_payload()
+        stage = body_stage_from_env(connection)
+        return stage.process(article_id, mode=mode, sampled=sampled).as_payload()
