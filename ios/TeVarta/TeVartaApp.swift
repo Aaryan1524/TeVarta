@@ -62,6 +62,15 @@ private enum AuthenticationError: LocalizedError {
 }
 
 private struct AuthAPIClient {
+    /// Debug builds may sign in against a local http backend; Release requires https.
+    static func isDebugLoopback(_ url: URL) -> Bool {
+        #if DEBUG
+        return url.scheme == "http" && ["127.0.0.1", "localhost"].contains(url.host() ?? "")
+        #else
+        return false
+        #endif
+    }
+
     private let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
@@ -70,7 +79,7 @@ private struct AuthAPIClient {
     init(bundle: Bundle = .main, session: URLSession = .shared) throws {
         guard let value = bundle.object(forInfoDictionaryKey: "TEVARTA_API_BASE_URL") as? String,
               let baseURL = URL(string: value),
-              baseURL.scheme == "https"
+              baseURL.scheme == "https" || Self.isDebugLoopback(baseURL)
         else { throw AuthenticationError.configuration }
         self.baseURL = baseURL
         self.session = session
@@ -181,6 +190,13 @@ private final class AuthenticationViewModel: ObservableObject {
         await updateSession { try await AuthAPIClient().refresh(refreshToken: session.refreshToken) }
     }
 
+    /// The bearer token for API calls, refreshed first if it has expired.
+    func accessToken() async throws -> String {
+        await refreshIfNeeded()
+        guard let session else { throw AuthenticationError.unauthorized }
+        return session.accessToken
+    }
+
     func signOut() async {
         guard let session else { return }
         isWorking = true
@@ -243,11 +259,20 @@ struct TeVartaApp: App {
     @StateObject private var authentication = AuthenticationViewModel()
     @State private var previewingFixtures = FixturePreview.requestedAtLaunch
 
+    /// The signed-in session's token, or the mock server's fixture token in Debug preview.
+    private var tokenProvider: TokenProvider {
+        if previewingFixtures && authentication.session == nil {
+            return { @MainActor in FixtureAPIClient.fixtureToken }
+        }
+        let authentication = authentication
+        return { @MainActor in try await authentication.accessToken() }
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
                 if authentication.session != nil || previewingFixtures {
-                    TeVartaRootView()
+                    TeVartaRootView(token: tokenProvider)
                 } else {
                     NavigationStack {
                         ContentView(authentication: authentication) { previewingFixtures = true }
@@ -309,7 +334,11 @@ private struct ContentView: View {
 }
 
 private struct TeVartaRootView: View {
-    @StateObject private var store = FixtureStore()
+    @StateObject private var store: FixtureStore
+
+    init(token: @escaping TokenProvider) {
+        _store = StateObject(wrappedValue: FixtureStore(token: token))
+    }
 
     var body: some View {
         TabView {
@@ -341,14 +370,18 @@ private final class FixtureStore: ObservableObject {
     @Published var profile: Profile?
     @Published var graphError: String?
     @Published var profileError: String?
-    private let client = FixtureAPIClient()
+    private let client: FixtureAPIClient
+
+    init(token: @escaping TokenProvider) {
+        client = FixtureAPIClient(token: token)
+    }
 
     func loadFeed(_ scenario: FeedScenario = .success) async {
         switch scenario {
         case .error:
             feedState = .loading
             do {
-                _ = try await client.feed(token: "expired-fixture-token")
+                _ = try await client.feed(overrideToken: "expired-fixture-token")
                 feedState = .failed("The fixture server did not reject an expired session.")
             } catch { feedState = .failed(error.localizedDescription) }
             return
@@ -368,6 +401,17 @@ private final class FixtureStore: ObservableObject {
         graphError = nil
         do { graph = try await client.graph() }
         catch { graphError = error.localizedDescription }
+    }
+    func reloadGraph() async {
+        graph = nil
+        await loadGraph()
+    }
+    /// Idempotent on the server: adding an entity already in the user's world is a no-op.
+    func addSeed(_ entity: EntityCandidate) async throws { _ = try await client.createSeed(entityID: entity.id) }
+    func constructionStatus() async throws -> SeedsStatusResponse { try await client.seedsStatus() }
+    func removeSeed(_ entityID: String) async throws {
+        try await client.removeSeed(entityID: entityID)
+        await reloadGraph()
     }
     func loadProfile() async {
         guard profile == nil else { return }
@@ -477,34 +521,73 @@ private struct SearchResultList: View {
     }
 
 private struct GraphConstructionView: View {
+    enum Phase: Equatable { case adding, building(String?), ready, failed(String) }
+    static let pollInterval: Duration = .seconds(2)
+    static let maxPolls = 60  // about two minutes before an honest "still building"
+
     let entity: EntityCandidate?
     @ObservedObject var store: FixtureStore
     let finish: () -> Void
-    @State private var isBuilt = false
+    @State private var phase: Phase = .adding
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Image(systemName: isBuilt ? "point.3.connected.trianglepath.dotted" : "circle.dotted")
+            Image(systemName: phase == .ready ? "point.3.connected.trianglepath.dotted" : "circle.dotted")
                 .font(.system(size: 72, weight: .thin)).foregroundStyle(TeVartaTheme.oxide)
-                .symbolEffect(.pulse, options: .repeating, isActive: !isBuilt)
-            Text(isBuilt ? "Your world, mapped." : "Mapping your world")
+                .symbolEffect(.pulse, options: .repeating, isActive: phase != .ready)
+            Text(phase == .ready ? "Your world, mapped." : "Mapping your world")
                 .font(.system(.largeTitle, design: .serif, weight: .bold))
-            Text(isBuilt ? "We’ll connect the evidence behind the things you care about." : "Building the first connections around \(entity?.name ?? "your selection").")
-                .multilineTextAlignment(.center).foregroundStyle(TeVartaTheme.muted)
+            Text(subtitle).multilineTextAlignment(.center).foregroundStyle(TeVartaTheme.muted)
             Spacer()
-            if isBuilt { Button("BEGIN") { finish() }.tevartaPrimaryButton() }
-            else if let error = store.graphError { ErrorCallout(message: error) { Task { await construct() } } }
-            else { ProgressView("Constructing fixture graph…").tint(TeVartaTheme.oxide) }
+            switch phase {
+            case .ready: Button("BEGIN") { finish() }.tevartaPrimaryButton()
+            case let .failed(message): ErrorCallout(message: message) { Task { await construct() } }
+            case .adding: ProgressView("Adding \(entity?.name ?? "your selection")…").tint(TeVartaTheme.oxide)
+            case .building: ProgressView("Building connections…").tint(TeVartaTheme.oxide)
+            }
         }
         .padding(24).background(TeVartaTheme.paper.ignoresSafeArea())
         .task { await construct() }
     }
 
+    private var subtitle: String {
+        switch phase {
+        case .ready: return "We’ll connect the evidence behind the things you care about."
+        case let .building(detail?): return detail
+        default: return "Building the first connections around \(entity?.name ?? "your selection")."
+        }
+    }
+
     private func construct() async {
-        await store.loadGraph()
-        guard store.graph != nil else { return }
-        try? await Task.sleep(for: .seconds(0.7))
-        isBuilt = true
+        guard let entity else { phase = .failed("Choose something to add first."); return }
+        phase = .adding
+        do { try await store.addSeed(entity) } catch {
+            phase = .failed(error.localizedDescription)
+            return
+        }
+        for _ in 0..<Self.maxPolls {
+            do {
+                let status = try await store.constructionStatus()
+                switch status.status {
+                case "ready":
+                    await store.reloadGraph()
+                    phase = .ready
+                    return
+                case "failed":
+                    phase = .failed(status.detail ?? "Graph construction failed.")
+                    return
+                default:
+                    phase = .building(status.detail)
+                }
+            } catch {
+                phase = .failed(error.localizedDescription)
+                return
+            }
+            try? await Task.sleep(for: Self.pollInterval)
+            if Task.isCancelled { return }
+        }
+        phase = .failed("Still building. It will appear in Your world when it’s ready.")
     }
 }
 
@@ -717,8 +800,12 @@ private struct EntityDetailView: View {
     let entityID: String
     let displayName: String
     @ObservedObject var store: FixtureStore
+    @Environment(\.dismiss) private var dismiss
     @State private var entity: EntityResponse?
     @State private var error: String?
+    @State private var confirmingRemoval = false
+    @State private var removing = false
+    @State private var removalError: String?
     var body: some View {
         ScrollView {
             if let entity {
@@ -727,14 +814,31 @@ private struct EntityDetailView: View {
                     Text(entity.entity.name).font(.system(.largeTitle, design: .serif, weight: .bold))
                     if let ticker = entity.entity.ticker { Text(ticker).tevartaLabel(color: TeVartaTheme.muted) }
                     VStack(alignment: .leading, spacing: 10) { Text("IN YOUR WORLD").tevartaLabel(); Text("This entity is available in the shared graph. Its connections determine when a signal is relevant to you.").foregroundStyle(TeVartaTheme.muted) }
-                    Button("REMOVE FROM MY WORLD", role: .destructive) {}.tevartaSecondaryButton(color: TeVartaTheme.oxide).accessibilityHint("Removal is a fixture-only shell in T13")
+                    Button(removing ? "REMOVING…" : "REMOVE FROM MY WORLD", role: .destructive) { confirmingRemoval = true }
+                        .tevartaSecondaryButton(color: TeVartaTheme.oxide)
+                        .disabled(removing)
+                    if let removalError { ErrorCallout(message: removalError) { Task { await remove() } } }
                 }.padding(24)
             } else if let error { ErrorCallout(message: error) { Task { await load() } }.padding(24) }
             else { LoadingView(title: "Loading \(displayName)") }
         }
         .background(TeVartaTheme.paper.ignoresSafeArea()).navigationTitle("Entity").navigationBarTitleDisplayMode(.inline).task { await load() }
+        .confirmationDialog("Remove \(displayName) from your world?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) { Task { await remove() } }
+        } message: {
+            Text("You’ll stop receiving signals that reach you only through it. It may stay visible if another item in your world connects to it.")
+        }
     }
     private func load() async { do { entity = try await store.entity(entityID) } catch { self.error = error.localizedDescription } }
+    private func remove() async {
+        removing = true
+        removalError = nil
+        defer { removing = false }
+        do {
+            try await store.removeSeed(entityID)
+            dismiss()
+        } catch { removalError = error.localizedDescription }
+    }
 }
 
 // MARK: - Settings and shared components
@@ -826,25 +930,48 @@ private enum FixtureAPIError: LocalizedError {
     }
 }
 
+typealias TokenProvider = @MainActor () async throws -> String
+
 private struct FixtureAPIClient {
+    static let fixtureToken = "fixture-access-token"
     private let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
-    init(bundle: Bundle = .main, session: URLSession = .shared) {
+    private let encoder: JSONEncoder
+    private let token: TokenProvider
+    init(token: @escaping TokenProvider, bundle: Bundle = .main, session: URLSession = .shared) {
         let configured = bundle.object(forInfoDictionaryKey: "TEVARTA_API_BASE_URL") as? String
         baseURL = URL(string: configured ?? "http://127.0.0.1:8000")!
+        self.token = token
         self.session = session; decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
+        encoder = JSONEncoder(); encoder.keyEncodingStrategy = .convertToSnakeCase
     }
-    func feed(scenario: String? = nil, token: String = "fixture-access-token") async throws -> FeedResponse { try await get("v1/feed", query: scenario.map { [URLQueryItem(name: "scenario", value: $0)] }, token: token) }
+    func feed(scenario: String? = nil, overrideToken: String? = nil) async throws -> FeedResponse { try await get("v1/feed", query: scenario.map { [URLQueryItem(name: "scenario", value: $0)] }, overrideToken: overrideToken) }
     func search(query: String) async throws -> EntitySearchResponse { try await get("v1/entities/search", query: [URLQueryItem(name: "q", value: query)]) }
     func event(eventID: String) async throws -> EventDetailResponse { try await get("v1/events/\(eventID)") }
     func graph() async throws -> GraphResponse { try await get("v1/graph") }
     func entity(entityID: String) async throws -> EntityResponse { try await get("v1/entities/\(entityID)") }
     func profile() async throws -> ProfileResponse { try await get("v1/profile") }
-    private func get<T: Decodable>(_ path: String, query: [URLQueryItem]? = nil, token: String = "fixture-access-token") async throws -> T {
+    func createSeed(entityID: String) async throws -> SeedResponse {
+        try await send("POST", "v1/seeds", body: SeedCreateRequest(entityId: entityID, weight: 1.0, source: "manual"))
+    }
+    func seedsStatus() async throws -> SeedsStatusResponse { try await get("v1/seeds/status") }
+    func removeSeed(entityID: String) async throws {
+        let _: NoContent = try await send("DELETE", "v1/seeds/\(entityID)", body: Optional<SeedCreateRequest>.none)
+    }
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem]? = nil, overrideToken: String? = nil) async throws -> T {
+        try await send("GET", path, query: query, body: Optional<SeedCreateRequest>.none, overrideToken: overrideToken)
+    }
+    private func send<T: Decodable, Body: Encodable>(_ method: String, _ path: String, query: [URLQueryItem]? = nil, body: Body?, overrideToken: String? = nil) async throws -> T {
         var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false); components?.queryItems = query
         guard let url = components?.url else { throw FixtureAPIError.configuration }
-        var request = URLRequest(url: url); request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        var request = URLRequest(url: url); request.httpMethod = method
+        let bearer = if let overrideToken { overrideToken } else { try await token() }
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.httpBody = try encoder.encode(body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw FixtureAPIError.invalidResponse }
         if http.statusCode == 202 {
@@ -853,11 +980,18 @@ private struct FixtureAPIClient {
         }
         guard (200 ..< 300).contains(http.statusCode) else {
             let apiError = try? decoder.decode(ErrorEnvelope.self, from: data)
-            throw FixtureAPIError.server(apiError?.error.message ?? "The fixture request failed (\(http.statusCode)).")
+            throw FixtureAPIError.server(apiError?.error.message ?? "The request failed (\(http.statusCode)).")
         }
+        if T.self == NoContent.self, let empty = NoContent() as? T { return empty }
         do { return try decoder.decode(T.self, from: data) } catch { throw FixtureAPIError.invalidResponse }
     }
 }
+
+private struct NoContent: Decodable { init() {} }
+private struct SeedCreateRequest: Encodable { let entityId: String; let weight: Double; let source: String }
+private struct Seed: Decodable { let entity: EntityCandidate; let weight: Double; let source: String }
+private struct SeedResponse: Decodable { let seed: Seed; let created: Bool }
+private struct SeedsStatusResponse: Decodable { let status: String; let updatedAt: String; let detail: String? }
 
 private struct EntityCandidate: Decodable, Identifiable {
     let id: String; let name: String; let entityType: String; let ticker: String?; let lifecycle: String
