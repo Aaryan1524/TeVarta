@@ -13,7 +13,9 @@ The repository supplies three required CI workflows:
   (`make database-test`) against a disposable pgvector service.
 - **Graph:** every `neo4j`-marked test (`make graph-test`) against a disposable
   `neo4j:5.26-community` service. Once a URI is set, the Neo4j fixtures connect or
-  error and never skip, so a broken service fails the job. It can't pass empty.
+  error and never skip, so a broken service fails the job. It can't pass empty. The
+  job also runs a PostgreSQL service, so tests marked both `database` and `neo4j` (the
+  Phase 2 integration proof) run here; the Database job skips them without Neo4j.
 - **Dependency review:** dependency changes are reviewed on pull requests;
   Dependabot keeps Python and Actions dependencies current. On private repositories
   without GitHub Advanced Security, the Dependency Review action is configured to

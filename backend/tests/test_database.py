@@ -401,7 +401,7 @@ def test_online_environment_target(database_factory, monkeypatch):
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0004_onboarding_handoff"
+                == "0005_expansion_lifecycle"
             )
     finally:
         engine.dispose()
@@ -688,7 +688,7 @@ def test_upgrade_repeated_then_downgrade_and_reupgrade(database_factory):
             command.upgrade(config, "head")
             assert (
                 connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar()
-                == "0004_onboarding_handoff"
+                == "0005_expansion_lifecycle"
             )
     finally:
         engine.dispose()
