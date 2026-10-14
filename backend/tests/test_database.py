@@ -76,6 +76,7 @@ TABLES = {
     "search_budget_alerts",
     "entity_expansion_requests",
     "entity_graph_views",
+    "seen_urls",
 }
 
 
