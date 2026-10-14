@@ -22,8 +22,15 @@ from uuid import uuid4
 import psycopg
 from psycopg.types.json import Jsonb
 
+from app.discovery import (
+    DiscoveryCandidate,
+    SearchProviderNotConfigured,
+    SearchRequest,
+    SearchService,
+)
 from app.graph_store import GraphStore, GraphWriteError, TemporalEdgeRevision, UpstreamEdge
 from app.onboarding import API_TYPES
+from app.operations import SearchBudgetExceeded
 from app.scoring import MAX_HOPS, PATH_SCORE_FLOOR, confidence, path_score
 from app.sec_catalog import CatalogInputError, normalize_alias
 from app.worker import celery_app
@@ -280,7 +287,7 @@ class ExpansionReport:
     max_hop: int
     promoted: int
     industry: str  # 'added' | 'present' | 'none' | 'skipped' | 'unavailable'
-    search: str  # 'skipped' until the search provider is configured
+    search: str  # 'queued:<n>' | 'skipped' | 'budget_exhausted' | 'failed'
 
     def as_dict(self) -> dict[str, object]:
         return self.__dict__.copy()
@@ -290,11 +297,33 @@ class ExpansionError(RuntimeError):
     pass
 
 
+SEARCH_WINDOW = timedelta(days=30)
+SEARCH_MAX_RESULTS = 50
+_LEGAL_SUFFIX = re.compile(
+    r"[,.]?\s+\b(inc|corp|corporation|co|ltd|limited|plc|llc|holdings?|nv|sa|ag)\b\.?",
+    flags=re.IGNORECASE,
+)
+
+
+def search_query(canonical_name: str) -> str:
+    """'TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD' → 'TAIWAN SEMICONDUCTOR MANUFACTURING'."""
+    previous, query = None, canonical_name
+    while previous != query:
+        previous, query = query, _LEGAL_SUFFIX.sub("", query).strip(" ,.")
+    return query or canonical_name
+
+
+CandidateSink = Callable[[DiscoveryCandidate], None]
+
+
 class EntityExpander:
     def __init__(self, connection: psycopg.Connection[Any], graph: GraphStore,
                  industry: IndustrySource | None = None,
-                 now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+                 now: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 search: SearchService | None = None,
+                 sink: CandidateSink | None = None) -> None:
         self.connection, self.graph, self.industry, self.now = connection, graph, industry, now
+        self.search, self.sink = search, sink
 
     def expand(self, entity_id: str) -> ExpansionReport:
         row = self.connection.execute(
@@ -331,10 +360,29 @@ class EntityExpander:
                    SET status = 'ready', graph_json = EXCLUDED.graph_json, updated_at = now()""",
                 (entity_id, Jsonb(view)),
             )
+        search_status = self._targeted_search(entity_id, name)
         report = ExpansionReport(entity_id, len(neighborhood.reached), len(neighborhood.edges),
-                                 neighborhood.max_hop, promoted, industry_status, "skipped")
+                                 neighborhood.max_hop, promoted, industry_status, search_status)
         logger.info("entity expanded", extra=report.as_dict())
         return report
+
+    def _targeted_search(self, entity_id: str, name: str) -> str:
+        """§6.3 one targeted sweep over the last 30 days, inside the shared monthly cap."""
+        if self.search is None or self.sink is None:
+            return "skipped"
+        now = self.now()
+        request = SearchRequest(uuid4(), search_query(name), now - SEARCH_WINDOW,
+                                SEARCH_MAX_RESULTS, (entity_id,))
+        try:
+            candidates = self.search.search(request, now)
+        except SearchBudgetExceeded:
+            return "budget_exhausted"
+        except Exception:  # search is enrichment; the view is already published
+            logger.warning("targeted search failed", extra={"entity_id": entity_id})
+            return "failed"
+        for candidate in candidates:
+            self.sink(candidate)
+        return f"queued:{len(candidates)}"
 
     def _add_industry(self, entity_id: str, cik: str | None, created_at: datetime) -> str:
         if not cik or self.industry is None:
@@ -439,6 +487,21 @@ def industry_source_from_env() -> IndustrySource | None:
         return None  # no declared contact: SEC refuses us, so skip enrichment
 
 
+def search_service_from_env() -> SearchService | None:
+    from app.discovery import _configured_search_service
+
+    try:
+        return _configured_search_service()
+    except SearchProviderNotConfigured:
+        return None
+
+
+def enqueue_candidate(candidate: DiscoveryCandidate) -> None:
+    from app.discovery import process_candidate
+
+    process_candidate.delay(candidate.as_payload())
+
+
 @celery_app.task(name="app.expansion.dispatch_expansions")
 def dispatch_expansions() -> list[dict[str, object]]:
     with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
@@ -447,7 +510,9 @@ def dispatch_expansions() -> list[dict[str, object]]:
             return []  # the common case: no graph connection every 15 seconds
         driver, graph = graph_store_from_env()
         try:
-            expander = EntityExpander(connection, graph, industry_source_from_env())
+            expander = EntityExpander(connection, graph, industry_source_from_env(),
+                                      search=search_service_from_env(),
+                                      sink=enqueue_candidate)
             return run_claims(connection, expander, claims)
         finally:
             driver.close()
