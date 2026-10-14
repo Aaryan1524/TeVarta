@@ -44,6 +44,10 @@ The frozen MVP remains the source of truth. This log records implementation choi
 
 2026-10-14 — T22 high-tier override promotes (pending founder confirmation; supersedes part of the 2026-10-13 T21 tier entry) — A `tier_value ≥ 0.9` article fetched by the override is promoted to tier 1 when its body names a live entity; the 5% tier-3 audit sample is never promoted — Aaryan; §7.2 fetches primary sources so they can reach the §8.1 fast path, which a quarantined 8-K cannot; the audit stays a pure measurement.
 2026-10-14 — T22 retention clock — Tier-3 (48 h) and tier-2 (30 d) retention run from a new `articles.ingested_at`, not `published_at`; audited and event-referenced articles are kept; a `seen_urls` tombstone (30 d, pending) stops a purged article being re-ingested and re-fetched while its feed still lists it — Aaryan; `ingested_at` alone only avoids purging old items on arrival.
+
+2026-10-14 — T24 pre-warm list (pending founder confirmation) — `config/prewarm.yaml`: the 30 T01 targets plus 20 widely held US names (BRK-B, NFLX, COST, WMT, KO, PEP, JNJ, LLY, PFE, HD, DIS, NKE, SBUX, UBER, PLTR, ADBE, IBM, ARM, GS, CVX) — Aaryan; reorder from the waitlist survey or the first 25 seeds, as for the T01 targets.
+2026-10-14 — T24 reviewed aliases — Short names live in `graph/entity_aliases.yaml`, resolved strictly, refused on collision unless `shared: true`, reviewed in PRs; the SEC import also writes a state-tag-free name alias (~7% of titles) — Aaryan; §6.1 live entities must be deeply resolved, and SEC titles alone miss TSMC, ASML, Amazon, Google, Qualcomm.
+=======
 =======
 =======
 =======
