@@ -4,7 +4,21 @@
 sources:
   - id: sec_current_filings
     domain: sec.gov
-    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&output=atom"
+    # 8-Ks only: the all-forms feed is dominated by insider Form 4s. Fast path (§8.1).
+    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=40&output=atom"
+    publisher_group: us_sec
+    tier_value: 1.0
+    reliability: 0.99
+    poll_interval_s: 300
+    active: false
+    ingestion_mode: atom
+    access_note: "Use the SEC-required descriptive User-Agent and stay within SEC rate limits."
+    evidence_url: "https://www.sec.gov/search-filings"
+
+  - id: sec_current_6k
+    domain: sec.gov
+    # Foreign private issuers (TSMC, ASML) report current events on 6-K, not 8-K.
+    feed_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=6-K&count=40&output=atom"
     publisher_group: us_sec
     tier_value: 1.0
     reliability: 0.99
@@ -38,19 +52,19 @@ sources:
 
   - id: treasury_press
     domain: home.treasury.gov
-    feed_url: "https://home.treasury.gov/rss/press-releases.xml"
+    feed_url: null
     publisher_group: us_treasury
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
     active: false
     ingestion_mode: rss
-    access_note: "Validate the current RSS endpoint in T19 before enabling the worker."
+    access_note: "No press-release feed (2026-10-14): press-releases.xml returns 404 and the site-wide rss.xml carries FAQs and careers pages, not releases. Treasury offers releases by GovDelivery email only; an adapter is not built."
     evidence_url: "https://home.treasury.gov/news/press-releases"
 
   - id: cftc_press_releases
     domain: cftc.gov
-    feed_url: "https://www.cftc.gov/RSS/CFTCPressReleases.xml"
+    feed_url: "https://www.cftc.gov/RSS/RSSGP/rssgp.xml"
     publisher_group: us_cftc
     tier_value: 1.0
     reliability: 0.99
@@ -101,6 +115,7 @@ sources:
     poll_interval_s: 300
     active: false
     ingestion_mode: json_api
+    access_note: "api.weather.gov robots.txt disallows all agents (2026-10-14): keep disabled."
     evidence_url: "https://www.weather.gov/documentation/services-web-api"
 
   - id: ecb_market_information

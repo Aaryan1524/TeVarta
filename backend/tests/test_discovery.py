@@ -128,7 +128,7 @@ def test_poll_task_without_active_sources_needs_no_contact(monkeypatch):
 
 def test_source_registry_keeps_every_source_disabled_until_t19_rights_review():
     sources = load_sources()
-    assert len(sources) == 20
+    assert len(sources) == 21
     assert all(not item.active for item in sources)
     assert all(item.poll_interval_s == 300 for item in sources)
 

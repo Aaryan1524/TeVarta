@@ -47,6 +47,9 @@ The frozen MVP remains the source of truth. This log records implementation choi
 
 2026-10-14 — T24 pre-warm list (pending founder confirmation) — `config/prewarm.yaml`: the 30 T01 targets plus 20 widely held US names (BRK-B, NFLX, COST, WMT, KO, PEP, JNJ, LLY, PFE, HD, DIS, NKE, SBUX, UBER, PLTR, ADBE, IBM, ARM, GS, CVX) — Aaryan; reorder from the waitlist survey or the first 25 seeds, as for the T01 targets.
 2026-10-14 — T24 reviewed aliases — Short names live in `graph/entity_aliases.yaml`, resolved strictly, refused on collision unless `shared: true`, reviewed in PRs; the SEC import also writes a state-tag-free name alias (~7% of titles) — Aaryan; §6.1 live entities must be deeply resolved, and SEC titles alone miss TSMC, ASML, Amazon, Google, Qualcomm.
+
+2026-10-14 — T19 source validation (activation pending founders) — SEC current filings split into 8-K and a new 6-K source (21 sources); CFTC moved to /RSS/RSSGP/rssgp.xml; Treasury has no press-release feed (null, GovDelivery only); NOAA stays disabled (robots.txt disallows all); TLS verifies with certifi — Aaryan; evidence in docs/T19_SOURCE_VALIDATION.md. 14 feeds validated; ECB, Bank of England and company newsroom terms need a founder read before activation.
+=======
 =======
 =======
 =======
