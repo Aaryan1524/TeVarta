@@ -31,16 +31,31 @@ The frozen MVP remains the source of truth. This log records implementation choi
 
 2026-10-13 — T20 search-only publishers (pending founder confirmation) — A search result whose host matches no configured source domain enters `sources` as `web:<host>` with its own publisher group, `tier_value` 0.25 (§9.3 aggregator), inactive — Aaryan; unvetted publishers must not inflate corroboration or confidence. Reclassify a host by adding it to `config/sources.yaml`.
 2026-10-13 — T20 metadata tagging guard (pending founder confirmation) — Names match only as proper-noun spans; there is no common-word lexicon, so sentence-initial or title-cased common words equal to a company alias are tagged — Aaryan; measured by the T22 tier-3 audit and `resolution_misses`; revisit with Week 10 resolution data (§6.4).
+
 2026-10-13 — T23 impact direction (pending founder confirmation) — Expansion and impact propagation walk upstream only, using `graph_store.IMPACT_DIRECTION`: DEPENDS_ON, MANUFACTURES_AT, EXPOSED_TO, OPERATES_IN, REGULATED_BY, IN_INDUSTRY, PRODUCES and CUSTOMER_OF carry impact from target to source; SUPPLIES, SOLE_SOURCE_FOR and OPERATED_BY from source to target; SUBSIDIARY_OF, LISTED_AS and COMPETES_WITH both ways — Aaryan; keeps co-customers out of a seed's world (§4, §6.2). Consequence: holders of a supplier (TSMC, ASML) get no customer-side demand news. CUSTOMER_OF is read as supply exposure, not demand linkage.
 2026-10-13 — T23 hop-2 bound reading (pending founder confirmation) — §6.3 "hop 2 only for nodes with weight ≥ 0.7" means the weight of the edge into the hop-1 node; hop 3 requires a hop-2 path score ≥ 0.15; seed weight 1.0 during global expansion — Aaryan; the per-user seed weight applies at fanout (T38).
 2026-10-13 — T23 view types beyond v1 (pending, part of the T25 enum conflict) — Prepared views write v1 API types where they exist and the lowercased database type otherwise (`industry`, `macrofactor`) — Aaryan; GraphNode.entity_type is free text in v1, so this needs no contract change; revisit with the enum decision.
+
 2026-10-13 — T19 search provider (pending Aaditya's confirmation) — Brave News Search is the one SearchProvider: metadata only, `freshness` window plus a per-result cut-off, behind the existing hard monthly cap (1,500 queries, alarm at 80%); results enter as unvetted `web:<host>` sources unless the host is configured — Aaryan chose it 2026-10-13; §2 hybrid discovery and §18 search budget. Revisit if result quality or cost is poor in Week 5 dogfooding.
+
 2026-10-13 — T21 SimHash near-duplicate threshold — 12 of 64 bits within ±7 days — Aaryan; measured on SEC filing and newsroom excerpts (1.5k–6k chars): byline, 'UPDATE 1-', word swaps and 5% truncation stay ≤ 10 bits; unrelated passages ≥ 21. Revisit with the T27 labelled set.
 2026-10-13 — T21 tier after body fetch (pending founder confirmation) — Body tags may add entities (`found_in='body'`) but never rewrite the metadata tier, including for T22's high-tier override and audit sample, so the recall audit keeps the original assignment — Aaryan; §7.2 does not specify re-tiering.
 2026-10-13 — T21 body storage — Content-addressed local private storage (`TEVARTA_BODY_STORE_DIR`) until R2 credentials exist; same `put` interface, bytes metered as `r2` — Aaryan; §7.4 private processing only, never served.
+
 2026-10-14 — T22 high-tier override promotes (pending founder confirmation; supersedes part of the 2026-10-13 T21 tier entry) — A `tier_value ≥ 0.9` article fetched by the override is promoted to tier 1 when its body names a live entity; the 5% tier-3 audit sample is never promoted — Aaryan; §7.2 fetches primary sources so they can reach the §8.1 fast path, which a quarantined 8-K cannot; the audit stays a pure measurement.
 2026-10-14 — T22 retention clock — Tier-3 (48 h) and tier-2 (30 d) retention run from a new `articles.ingested_at`, not `published_at`; audited and event-referenced articles are kept; a `seen_urls` tombstone (30 d, pending) stops a purged article being re-ingested and re-fetched while its feed still lists it — Aaryan; `ingested_at` alone only avoids purging old items on arrival.
+
 2026-10-14 — T24 pre-warm list (pending founder confirmation) — `config/prewarm.yaml`: the 30 T01 targets plus 20 widely held US names (BRK-B, NFLX, COST, WMT, KO, PEP, JNJ, LLY, PFE, HD, DIS, NKE, SBUX, UBER, PLTR, ADBE, IBM, ARM, GS, CVX) — Aaryan; reorder from the waitlist survey or the first 25 seeds, as for the T01 targets.
 2026-10-14 — T24 reviewed aliases — Short names live in `graph/entity_aliases.yaml`, resolved strictly, refused on collision unless `shared: true`, reviewed in PRs; the SEC import also writes a state-tag-free name alias (~7% of titles) — Aaryan; §6.1 live entities must be deeply resolved, and SEC titles alone miss TSMC, ASML, Amazon, Google, Qualcomm.
+
 2026-10-14 — T19 source validation (activation pending founders) — SEC current filings split into 8-K and a new 6-K source (21 sources); CFTC moved to /RSS/RSSGP/rssgp.xml; Treasury has no press-release feed (null, GovDelivery only); NOAA stays disabled (robots.txt disallows all); TLS verifies with certifi — Aaryan; evidence in docs/T19_SOURCE_VALIDATION.md. 14 feeds validated; ECB, Bank of England and company newsroom terms need a founder read before activation.
+=======
+=======
+=======
+=======
+=======
+=======
+2026-10-13 — T15 agent-drafted batches (pending founder confirmation) — Batches drafted in a Claude Code session are labelled `drafted_by: llm:claude-opus-5-5` with a session-generated `usage_request_id` that has no `usage_records` row, because the drafting ran outside the product's metered OpenAI path. Every excerpt is fetched from its source URL and verified verbatim before the batch is written — Aaryan; keeps model provenance truthful without inventing metering. Human acceptance (Aaryan) and Aaditya's PR review remain required for every edge.
+
+
 

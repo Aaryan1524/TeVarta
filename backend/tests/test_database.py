@@ -1026,3 +1026,49 @@ def test_onboarding_migration_roundtrip(database_factory):
             ).scalar() == "entity_graph_views"
     finally:
         engine.dispose()
+
+
+def test_benchmark_collection_exports_tier_one_and_two_with_unreviewed_hints(migrated_url):
+    from app.benchmark import collect_candidates
+
+    start = datetime(2026, 10, 13, 9, tzinfo=UTC)
+    migrated_dsn = migrated_url.set(drivername="postgresql").render_as_string(
+        hide_password=False)
+    with psycopg.connect(migrated_dsn) as connection:
+        for source, group, tier_value in (("t27_sec", "us_sec", 1.0),
+                                          ("t27_wire", "reuters", 0.7)):
+            connection.execute(
+                """INSERT INTO sources (id, domain, publisher_group, tier_value, reliability,
+                                        poll_interval_s) VALUES (%s, %s, %s, %s, 0.9, 300)
+                   ON CONFLICT (id) DO NOTHING""", (source, f"{source}.org", group, tier_value),
+            )
+        connection.execute(
+            """INSERT INTO entities (entity_id, canonical_name, type, status)
+               VALUES ('ent_t27_tsm', 'TSMC', 'Company', 'live') ON CONFLICT DO NOTHING"""
+        )
+
+        def add(source, title, hours, tier):
+            row = connection.execute(
+                """INSERT INTO articles (public_id, url_hash, url, source_id, title,
+                                         published_at, tier)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, public_id""",
+                ("art_" + uuid4().hex, uuid4().hex, f"https://x.org/{uuid4().hex}", source,
+                 title, start + timedelta(hours=hours), tier),
+            ).fetchone()
+            connection.execute(
+                """INSERT INTO article_entities VALUES (%s, 'ent_t27_tsm', 1, 1, 'metadata')""",
+                (row[0],),
+            )
+            return row[1]
+
+        filing = add("t27_sec", "8-K - TSMC", 0, 1)
+        wire = add("t27_wire", "TSMC files report", 2, 1)
+        tier_three = add("t27_wire", "Unrelated", 3, 3)
+        candidates = {c["id"]: c for c in collect_candidates(connection, start - timedelta(1))}
+        connection.rollback()
+
+    assert tier_three not in candidates
+    assert candidates[filing]["suggested_event"] == candidates[wire]["suggested_event"]
+    assert candidates[filing]["case_hint"] == "filing_then_wires"
+    assert candidates[filing]["suggestion_reviewed"] is False
+    assert candidates[wire]["entity_ids"] == ["ent_t27_tsm"]
