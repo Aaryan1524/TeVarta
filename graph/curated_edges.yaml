@@ -3,5 +3,36 @@
 # which re-renders this file: each edge must match an accept/edit record in
 # graph/curation/review_log.jsonl by content SHA or the loader refuses it.
 # Confidence is computed from evidence (§9.1) and is never written here.
-entities: []
+entities:
+- entity_id: ent_cur_taiwan
+  canonical_name: Taiwan
+  type: Country
+  aliases:
+  - Taiwan
+- entity_id: ent_cur_netherlands
+  canonical_name: Netherlands
+  type: Country
+  aliases:
+  - Netherlands
+  - The Netherlands
+- entity_id: ent_cur_china
+  canonical_name: China
+  type: Country
+  aliases:
+  - China
+  - China mainland
+  - mainland China
+  - People's Republic of China
+- entity_id: ent_cur_carl_zeiss_smt
+  canonical_name: Carl Zeiss SMT
+  type: Company
+  aliases:
+  - Carl Zeiss SMT
+  - ZEISS SMT
+- entity_id: ent_cur_samsung_electronics
+  canonical_name: Samsung Electronics Co., Ltd.
+  type: Company
+  aliases:
+  - Samsung Electronics
+  - Samsung Electronics Co Ltd
 edges: []

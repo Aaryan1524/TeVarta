@@ -1,0 +1,488 @@
+batch_id: t15-batch-01-sc2-foundry
+drafted_by: llm:claude-opus-5-5
+drafted_at: '2026-10-13T00:00:00+00:00'
+usage_request_id: f4c41e01-bb36-4600-b62d-fde4df66325d
+subject: SC2 demo path and foundry/memory dependency hubs
+evidence:
+- url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+  source_type: sec_filing
+  publisher_group: tsmc
+  locator: Form 6-K filed 2025-03-03
+proposals:
+- proposal_id: t15-batch-01-sc2-foundry-01
+  draft:
+    source: AAPL
+    relation: DEPENDS_ON
+    target: TSM
+    directness: stated
+    rationale: Apple produces advanced silicon at TSMC and is the largest customer of TSMC's Arizona fab;
+      TSMC names Apple as a customer.
+    excerpt: The fund’s expansion includes a multibillion-dollar commitment from Apple to produce advanced
+      silicon in TSMC’s Fab 21 facility in Arizona. Apple is the largest customer at this state-of-the-art
+      facility
+    excerpt_verified: true
+  draft_sha: 2054857f4f3cb24196aa9e39ec2622ef8f51929277885203fb13c0e8ce4e68c2
+  decision: pending
+  reason: null
+  edge:
+    source: AAPL
+    relation: DEPENDS_ON
+    target: TSM
+    weight: 0.9
+    directness: 1.0
+    rationale: Apple produces advanced silicon at TSMC and is the largest customer of TSMC's Arizona fab;
+      TSMC names Apple as a customer.
+    evidence:
+    - url: https://www.apple.com/newsroom/2025/02/apple-will-spend-more-than-500-billion-usd-in-the-us-over-the-next-four-years/
+      source_type: company_ir
+      publisher_group: apple
+      locator: Apple Newsroom, February 2025
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 6-K filed 2025-03-03
+    valid_from: '2025-02-24'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-02
+  draft:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: TSM
+    directness: stated
+    rationale: NVIDIA uses TSMC as a foundry to produce its semiconductor wafers; TSMC names NVIDIA as
+      a customer.
+    excerpt: We utilize foundries, such as Taiwan Semiconductor Manufacturing Company Limited, or TSMC,
+      and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers.
+    excerpt_verified: true
+  draft_sha: a913f4c82a596b970de9a9ba4d55896638ae74d8ef21ad36e0550138e59b961a
+  decision: pending
+  reason: null
+  edge:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: TSM
+    weight: 0.9
+    directness: 1.0
+    rationale: NVIDIA uses TSMC as a foundry to produce its semiconductor wafers; TSMC names NVIDIA as
+      a customer.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+      source_type: sec_filing
+      publisher_group: nvidia
+      locator: Form 10-K, fiscal year ended 2026-01-25
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 6-K filed 2025-03-03
+    valid_from: '2025-03-03'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-03
+  draft:
+    source: AMD
+    relation: DEPENDS_ON
+    target: TSM
+    directness: stated
+    rationale: AMD uses TSMC to produce wafers for its HPC, FPGA and adaptive SoC products; TSMC names
+      AMD as a customer.
+    excerpt: We utilize Taiwan Semiconductor Manufacturing Company Limited (TSMC) for the production of
+      wafers for our HPC, FPGA and adaptive SoC products
+    excerpt_verified: true
+  draft_sha: e4a3d18b061dbd836a2ecd01e415f4080b065ac043b660b38125959d4c1e1821
+  decision: pending
+  reason: null
+  edge:
+    source: AMD
+    relation: DEPENDS_ON
+    target: TSM
+    weight: 0.9
+    directness: 1.0
+    rationale: AMD uses TSMC to produce wafers for its HPC, FPGA and adaptive SoC products; TSMC names
+      AMD as a customer.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/2488/000000248826000018/amd-20251227.htm
+      source_type: sec_filing
+      publisher_group: amd
+      locator: Form 10-K, fiscal year ended 2025-12-27; Third-Party Wafer Foundry Facilities
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 6-K filed 2025-03-03
+    valid_from: '2025-03-03'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-04
+  draft:
+    source: QCOM
+    relation: DEPENDS_ON
+    target: TSM
+    directness: stated
+    rationale: TSMC is a primary foundry supplier for Qualcomm's integrated circuits; TSMC names Qualcomm
+      as a customer.
+    excerpt: The primary foundry suppliers for our various digital, analog/mixed-signal, RF and PM integrated
+      circuits include Taiwan Semiconductor Manufacturing Company (TSMC), Samsung Electronics and Global
+      Foundries.
+    excerpt_verified: true
+  draft_sha: b277b550551d5ad91fa4358dfc234af9ff2a6296c17ad80158b637cb05fac19f
+  decision: pending
+  reason: null
+  edge:
+    source: QCOM
+    relation: DEPENDS_ON
+    target: TSM
+    weight: 0.9
+    directness: 1.0
+    rationale: TSMC is a primary foundry supplier for Qualcomm's integrated circuits; TSMC names Qualcomm
+      as a customer.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/804328/000080432825000085/qcom-20250928.htm
+      source_type: sec_filing
+      publisher_group: qualcomm
+      locator: Form 10-K, fiscal year ended 2025-09-28
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 6-K filed 2025-03-03
+    valid_from: '2025-03-03'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-05
+  draft:
+    source: AVGO
+    relation: DEPENDS_ON
+    target: TSM
+    directness: stated
+    rationale: Broadcom outsources the majority of its front-end wafer manufacturing to foundries including
+      TSMC; TSMC names Broadcom as a customer.
+    excerpt: The majority of our front-end wafer manufacturing operations is outsourced to external foundries,
+      including Taiwan Semiconductor Manufacturing Company Limited (“TSMC”).
+    excerpt_verified: true
+  draft_sha: 0aa6b5ccb247c04e08c3dde365e134a84211d44580a8e65c0842c67d45797c3f
+  decision: pending
+  reason: null
+  edge:
+    source: AVGO
+    relation: DEPENDS_ON
+    target: TSM
+    weight: 0.9
+    directness: 1.0
+    rationale: Broadcom outsources the majority of its front-end wafer manufacturing to foundries including
+      TSMC; TSMC names Broadcom as a customer.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1730168/000173016825000121/avgo-20251102.htm
+      source_type: sec_filing
+      publisher_group: broadcom
+      locator: Form 10-K, fiscal year ended 2025-11-02
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 6-K filed 2025-03-03
+    valid_from: '2025-03-03'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-06
+  draft:
+    source: ASML
+    relation: SUPPLIES
+    target: TSM
+    directness: inferred
+    rationale: ASML received TSMC's supplier award, which implies ASML supplies TSMC; the filing does
+      not state what it supplies.
+    excerpt: In November 2025, we were honored to receive the TSMC Supplier ‘Excellence in Green Manufacturing’
+      Award
+    excerpt_verified: true
+  draft_sha: 09b20d660dd15b0544df7402e27b927f381c20548aac48d949f3038006db9a48
+  decision: pending
+  reason: null
+  edge:
+    source: ASML
+    relation: SUPPLIES
+    target: TSM
+    weight: 0.85
+    directness: 0.6
+    rationale: ASML received TSMC's supplier award, which implies ASML supplies TSMC; the filing does
+      not state what it supplies.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+      source_type: sec_filing
+      publisher_group: asml
+      locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+    valid_from: '2025-12-31'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-07
+  draft:
+    source: Carl Zeiss SMT
+    relation: SOLE_SOURCE_FOR
+    target: ASML
+    directness: stated
+    rationale: Carl Zeiss SMT is ASML's sole supplier of lenses, mirrors and other critical optics, and
+      limits how many lithography systems ASML can build.
+    excerpt: Carl Zeiss SMT, our sole supplier of lenses, mirrors, illuminators, collectors and other
+      critical optical components
+    excerpt_verified: true
+  draft_sha: adbcf84c307665ab55001839c6d0525ef06aa160dc0dd6ba76aafcce5e3dfac8
+  decision: pending
+  reason: null
+  edge:
+    source: Carl Zeiss SMT
+    relation: SOLE_SOURCE_FOR
+    target: ASML
+    weight: 0.95
+    directness: 1.0
+    rationale: Carl Zeiss SMT is ASML's sole supplier of lenses, mirrors and other critical optics, and
+      limits how many lithography systems ASML can build.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+      source_type: sec_filing
+      publisher_group: asml
+      locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+    valid_from: '2025-12-31'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-08
+  draft:
+    source: ASML
+    relation: EXPOSED_TO
+    target: Netherlands
+    directness: stated
+    rationale: ASML's manufacturing, subassembly and system testing take place largely in Veldhoven, Eindhoven
+      and Oirschot in the Netherlands.
+    excerpt: All of our manufacturing activities, including subassembly, final assembly and system testing,
+      take place in (cleanroom) facilities in Veldhoven, Eindhoven, Oirschot (the Netherlands), Berlin
+      (Germany), Wilton, San Diego (US), Pyeongtaek (South Korea) and Linkou and Tainan (Taiwan).
+    excerpt_verified: true
+  draft_sha: d6643596f0fe6e0d844492b59281a8418209780b511130e776a5b71532b1f2b6
+  decision: pending
+  reason: null
+  edge:
+    source: ASML
+    relation: EXPOSED_TO
+    target: Netherlands
+    weight: 0.8
+    directness: 1.0
+    rationale: ASML's manufacturing, subassembly and system testing take place largely in Veldhoven, Eindhoven
+      and Oirschot in the Netherlands.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+      source_type: sec_filing
+      publisher_group: asml
+      locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+    valid_from: '2025-12-31'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-09
+  draft:
+    source: ASML
+    relation: EXPOSED_TO
+    target: Taiwan
+    directness: stated
+    rationale: ASML lists manufacturing facilities in Linkou and Tainan, Taiwan. Evidence-backed per SC2;
+      reviewer decides whether to include.
+    excerpt: All of our manufacturing activities, including subassembly, final assembly and system testing,
+      take place in (cleanroom) facilities in Veldhoven, Eindhoven, Oirschot (the Netherlands), Berlin
+      (Germany), Wilton, San Diego (US), Pyeongtaek (South Korea) and Linkou and Tainan (Taiwan).
+    excerpt_verified: true
+  draft_sha: cbadfe83fae77d9ca74ce9a28229b648a6617fd30d54de826134b97a2893c927
+  decision: pending
+  reason: null
+  edge:
+    source: ASML
+    relation: EXPOSED_TO
+    target: Taiwan
+    weight: 0.8
+    directness: 1.0
+    rationale: ASML lists manufacturing facilities in Linkou and Tainan, Taiwan. Evidence-backed per SC2;
+      reviewer decides whether to include.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+      source_type: sec_filing
+      publisher_group: asml
+      locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+    valid_from: '2025-12-31'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-10
+  draft:
+    source: TSM
+    relation: EXPOSED_TO
+    target: Taiwan
+    directness: stated
+    rationale: TSMC's operations are concentrated in Taiwan; earthquakes in Taiwan damaged its inventories,
+      plants and equipment in 2024 and 2025.
+    excerpt: several earthquakes struck Taiwan, causing damage to our inventories, plant facilities, machinery
+      and equipment.
+    excerpt_verified: true
+  draft_sha: 832de293aa4c222b87c3bc7cd82ca471b83dbcd56dbe77f00328f6b2993f454f
+  decision: pending
+  reason: null
+  edge:
+    source: TSM
+    relation: EXPOSED_TO
+    target: Taiwan
+    weight: 0.8
+    directness: 1.0
+    rationale: TSMC's operations are concentrated in Taiwan; earthquakes in Taiwan damaged its inventories,
+      plants and equipment in 2024 and 2025.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/tsm-20251231.htm
+      source_type: sec_filing
+      publisher_group: tsmc
+      locator: Form 20-F, fiscal year ended 2025-12-31; risk factors, natural disasters
+    valid_from: '2025-12-31'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-11
+  draft:
+    source: AAPL
+    relation: EXPOSED_TO
+    target: China
+    directness: stated
+    rationale: Substantially all Apple hardware is manufactured by outsourcing partners located primarily
+      in China mainland and other Asian countries.
+    excerpt: Substantially all of the Company’s hardware products are manufactured by outsourcing partners
+      that are located primarily in China mainland, India, Japan, South Korea, Taiwan and Vietnam.
+    excerpt_verified: true
+  draft_sha: 60c94d50bd213a641df468028af53570fd168c2974fd1340c8aca211b4a5e529
+  decision: pending
+  reason: null
+  edge:
+    source: AAPL
+    relation: EXPOSED_TO
+    target: China
+    weight: 0.8
+    directness: 1.0
+    rationale: Substantially all Apple hardware is manufactured by outsourcing partners located primarily
+      in China mainland and other Asian countries.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm
+      source_type: sec_filing
+      publisher_group: apple
+      locator: Form 10-K, fiscal year ended 2025-09-27; Note 13 segment and geographic data
+    valid_from: '2025-09-27'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-12
+  draft:
+    source: AAPL
+    relation: EXPOSED_TO
+    target: Taiwan
+    directness: stated
+    rationale: Apple's outsourcing manufacturing partners are located primarily in Asian countries including
+      Taiwan.
+    excerpt: Substantially all of the Company’s hardware products are manufactured by outsourcing partners
+      that are located primarily in China mainland, India, Japan, South Korea, Taiwan and Vietnam.
+    excerpt_verified: true
+  draft_sha: 1dab14f758a98050e0da6b139aac9cf511d899b82542115713c23f3a6bd8f666
+  decision: pending
+  reason: null
+  edge:
+    source: AAPL
+    relation: EXPOSED_TO
+    target: Taiwan
+    weight: 0.8
+    directness: 1.0
+    rationale: Apple's outsourcing manufacturing partners are located primarily in Asian countries including
+      Taiwan.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm
+      source_type: sec_filing
+      publisher_group: apple
+      locator: Form 10-K, fiscal year ended 2025-09-27; Note 13 segment and geographic data
+    valid_from: '2025-09-27'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-13
+  draft:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: MU
+    directness: stated
+    rationale: NVIDIA purchases memory from Micron, among others.
+    excerpt: We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.
+    excerpt_verified: true
+  draft_sha: 0e3b65289694660ec6e1f7743298351332963cb6439d725b245c107987ec29e4
+  decision: pending
+  reason: null
+  edge:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: MU
+    weight: 0.9
+    directness: 1.0
+    rationale: NVIDIA purchases memory from Micron, among others.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+      source_type: sec_filing
+      publisher_group: nvidia
+      locator: Form 10-K, fiscal year ended 2026-01-25
+    valid_from: '2026-01-25'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-14
+  draft:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: SKHY
+    directness: stated
+    rationale: NVIDIA purchases memory from SK Hynix, among others.
+    excerpt: We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.
+    excerpt_verified: true
+  draft_sha: 43d6984a475784690d90adbbd650a64fd548c4eec8db6ca8e8ee083f5484823c
+  decision: pending
+  reason: null
+  edge:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: SKHY
+    weight: 0.9
+    directness: 1.0
+    rationale: NVIDIA purchases memory from SK Hynix, among others.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+      source_type: sec_filing
+      publisher_group: nvidia
+      locator: Form 10-K, fiscal year ended 2026-01-25
+    valid_from: '2026-01-25'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-15
+  draft:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: Samsung Electronics
+    directness: stated
+    rationale: NVIDIA uses Samsung as a foundry for semiconductor wafers and purchases memory from Samsung.
+    excerpt: We utilize foundries, such as Taiwan Semiconductor Manufacturing Company Limited, or TSMC,
+      and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers.
+    excerpt_verified: true
+  draft_sha: 56be4dfb061eb64a45ac6ae5d11f5b259051db34006a53ff35125c3c6d48c005
+  decision: pending
+  reason: null
+  edge:
+    source: NVDA
+    relation: DEPENDS_ON
+    target: Samsung Electronics
+    weight: 0.9
+    directness: 1.0
+    rationale: NVIDIA uses Samsung as a foundry for semiconductor wafers and purchases memory from Samsung.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+      source_type: sec_filing
+      publisher_group: nvidia
+      locator: Form 10-K, fiscal year ended 2026-01-25
+    valid_from: '2026-01-25'
+    review_by: '2027-04-13'
+- proposal_id: t15-batch-01-sc2-foundry-16
+  draft:
+    source: MU
+    relation: EXPOSED_TO
+    target: Taiwan
+    directness: stated
+    rationale: A majority of Micron's DRAM production output came from its fabrication facilities in Taiwan.
+    excerpt: A majority of our DRAM production output in 2026 was from our fabrication facilities in Taiwan
+    excerpt_verified: true
+  draft_sha: 3a7125135b80e101283af600a57ab2b149cedf6e3aeca0481b83c45a902dad13
+  decision: pending
+  reason: null
+  edge:
+    source: MU
+    relation: EXPOSED_TO
+    target: Taiwan
+    weight: 0.8
+    directness: 1.0
+    rationale: A majority of Micron's DRAM production output came from its fabrication facilities in Taiwan.
+    evidence:
+    - url: https://www.sec.gov/Archives/edgar/data/723125/000072312526000023/mu-20260903.htm
+      source_type: sec_filing
+      publisher_group: micron
+      locator: Form 10-K, fiscal year ended 2026-09-03; risk factors, Taiwan
+    valid_from: '2026-09-03'
+    review_by: '2027-04-13'
