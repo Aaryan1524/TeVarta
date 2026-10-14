@@ -442,10 +442,13 @@ class MetadataStage:
 
         with self.connection.transaction():
             source = resolve_source(self.connection, hint)
-            existing = self.connection.execute(
-                "SELECT 1 FROM articles WHERE url_hash = %s", (key,)
+            # The tombstone outlives the article's own retention, so a purged article is
+            # not re-ingested (or its body re-fetched) while a feed still lists it.
+            first = self.connection.execute(
+                "INSERT INTO seen_urls (url_hash, first_seen) VALUES (%s, %s) "
+                "ON CONFLICT (url_hash) DO NOTHING RETURNING 1", (key, self.now()),
             ).fetchone()
-            if existing:
+            if first is None:
                 return MetadataResult(None, None, True, None, source.id, source.tier_value, ())
             tagging = self.tagger.tag(title, snippet, source.domain)
             tier = tagging.tier
