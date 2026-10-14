@@ -90,8 +90,10 @@ long, and `observed_at` is now.
 
 ## Not yet in this slice
 
-- The targeted 30-day search sweep reports `search: skipped` until the Brave adapter
-  (T19) lands.
+- The targeted 30-day search runs through the shared Brave budget when
+  `TEVARTA_SEARCH_PROVIDER=brave` and `BRAVE_SEARCH_API_KEY` are set; otherwise the
+  report says `skipped`. It runs after the view is published, so a slow or failed
+  search never delays onboarding (`failed`, `budget_exhausted`).
 - `backfill_from_quarantine` and the 7-day article backfill are T47 (Phase 5).
 - Short company names ("TSMC", "ASML", "Amazon") need reviewed aliases. That is
   T24's alias file; until it lands, headlines match only the SEC legal name.

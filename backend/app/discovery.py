@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID, uuid4
 
 import psycopg
@@ -34,6 +35,7 @@ def utc_now() -> datetime:
 
 
 DEFAULT_SOURCES_PATH = Path(__file__).resolve().parents[2] / "config" / "sources.yaml"
+DEFAULT_USAGE_LIMITS_PATH = Path(__file__).resolve().parents[2] / "config" / "usage_limits.json"
 
 
 class DiscoveryConfigurationError(ValueError):
@@ -433,10 +435,72 @@ class EntitySweep:
         return tuple(candidates)
 
 
+class BraveSearchProvider:
+    """The one permitted SearchProvider (T19): Brave News Search, metadata only."""
+
+    URL = "https://api.search.brave.com/res/v1/news/search"
+    provider = "brave"
+
+    def __init__(self, api_key: str, fetcher: UrlFetcher = fetch_url,
+                 now: Callable[[], datetime] = utc_now) -> None:
+        if not api_key.strip():
+            raise SearchProviderNotConfigured("BRAVE_SEARCH_API_KEY is empty")
+        self._api_key, self.fetcher, self.now = api_key.strip(), fetcher, now
+
+    def search(self, request: SearchRequest) -> tuple[DiscoveryCandidate, ...]:
+        today = self.now().astimezone(UTC).date()
+        query = urlencode({
+            "q": request.query,
+            "count": request.max_results,
+            # Day-granular window; exact cut-off applied per result below.
+            "freshness": f"{request.published_after.astimezone(UTC).date()}to{today}",
+            "safesearch": "off",
+            "search_lang": "en",
+        })
+        content = self.fetcher(
+            f"{self.URL}?{query}",
+            {"Accept": "application/json", "X-Subscription-Token": self._api_key},
+        )
+        payload = json.loads(content)
+        results = payload.get("results") if isinstance(payload, dict) else None
+        if not isinstance(results, list):
+            raise DiscoveryConfigurationError("Brave response has no results list")
+        candidates = []
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            url, title = result.get("url"), result.get("title")
+            if not isinstance(url, str) or not isinstance(title, str):
+                continue
+            meta = result.get("meta_url") if isinstance(result.get("meta_url"), dict) else {}
+            host = meta.get("hostname") or urlsplit(url).hostname
+            if not isinstance(host, str) or not host:
+                continue
+            published = _parse_datetime(result.get("page_age"), self.now())
+            if published < request.published_after:
+                continue
+            description = result.get("description")
+            candidates.append(DiscoveryCandidate(
+                url, title, description if isinstance(description, str) else None,
+                host.lower(), published, f"web:{host.lower()}",
+            ))
+        return tuple(candidates)
+
+
 def _configured_search_service() -> SearchService:
-    raise SearchProviderNotConfigured(
-        "T19 requires both founders to approve and configure the one SearchProvider"
+    """Brave behind the hard monthly cap; fails closed until both are configured."""
+    if os.getenv("TEVARTA_SEARCH_PROVIDER", "") != "brave":
+        raise SearchProviderNotConfigured("set TEVARTA_SEARCH_PROVIDER=brave to enable search")
+    api_key = os.getenv("BRAVE_SEARCH_API_KEY", "")
+    if not api_key.strip():
+        raise SearchProviderNotConfigured("set BRAVE_SEARCH_API_KEY to enable search")
+    limits = json.loads(DEFAULT_USAGE_LIMITS_PATH.read_text())
+    budget = PostgresSearchBudgetStore(
+        os.environ["TEVARTA_POSTGRES_URL"],
+        int(limits["limits"]["search"]["monthly_query_cap"]),
+        float(limits["alerts"]["search_usage_ratio"]),
     )
+    return SearchService(BraveSearchProvider(api_key), budget)
 
 
 @celery_app.task(name="app.discovery.process_candidate")
@@ -469,7 +533,11 @@ def poll_sources() -> int:
 
 @celery_app.task(name="app.discovery.entity_sweep")
 def entity_sweep() -> int:
-    service = _configured_search_service()
+    try:
+        service = _configured_search_service()
+    except SearchProviderNotConfigured as error:
+        logger.info("entity sweep skipped: %s", error)
+        return 0
     entities = PostgresSeedEntityRepository(os.environ["TEVARTA_POSTGRES_URL"])
     candidates = EntitySweep(entities, service).run()
     for candidate in candidates:

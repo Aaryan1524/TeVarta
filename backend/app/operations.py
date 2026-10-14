@@ -30,6 +30,7 @@ SENSITIVE_FIELD_NAMES = frozenset(
     {
         "access_token", "refresh_token", "identity_token", "authorization_code", "apns_token",
         "apple_sub", "authorization", "cookie", "set-cookie", "tevarta_jwt_signing_key",
+        "x-subscription-token", "brave_search_api_key", "openai_api_key",
     }
 )
 REDACTED = "[REDACTED]"

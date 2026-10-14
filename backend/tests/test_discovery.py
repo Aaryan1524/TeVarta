@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -249,3 +250,88 @@ def test_poll_task_with_active_sources_fails_closed_without_contact(monkeypatch,
 
     with pytest.raises(DiscoveryConfigurationError, match="TEVARTA_HTTP_CONTACT"):
         poll_sources.run()
+
+
+BRAVE_NOW = datetime(2026, 10, 13, 12, tzinfo=UTC)
+
+
+def brave_payload():
+    return json.dumps({"type": "news", "results": [
+        {"title": "TSMC raises prices", "url": "https://www.reuters.com/tech/tsmc-prices",
+         "description": "Taiwan Semiconductor Manufacturing said...",
+         "page_age": "2026-10-12T09:30:00", "meta_url": {"hostname": "www.reuters.com"}},
+        {"title": "No meta url", "url": "https://Blog.Example.net/a",
+         "page_age": "2026-10-13T01:00:00"},
+        {"title": "Too old for the window", "url": "https://example.net/old",
+         "page_age": "2026-08-01T00:00:00"},
+        {"title": "missing url"},
+        "not a result",
+    ]}).encode()
+
+
+def test_brave_adapter_requests_the_window_and_emits_the_shared_candidate_shape():
+    from app.discovery import BraveSearchProvider
+
+    calls = []
+
+    def fetcher(url, headers):
+        calls.append((url, headers))
+        return brave_payload()
+
+    provider = BraveSearchProvider("secret-key", fetcher=fetcher, now=lambda: BRAVE_NOW)
+    request = SearchRequest(uuid4(), "Taiwan Semiconductor", BRAVE_NOW - timedelta(days=30),
+                            50, ("ent_tsm",))
+    candidates = provider.search(request)
+
+    (url, headers), = calls
+    assert url.startswith("https://api.search.brave.com/res/v1/news/search?")
+    assert "q=Taiwan+Semiconductor" in url and "count=50" in url
+    assert "freshness=2026-09-13to2026-10-13" in url
+    assert headers["X-Subscription-Token"] == "secret-key"
+    assert [(c.title, c.publisher, c.source_hint) for c in candidates] == [
+        ("TSMC raises prices", "www.reuters.com", "web:www.reuters.com"),
+        ("No meta url", "blog.example.net", "web:blog.example.net"),
+    ]
+    assert candidates[0].published_at == datetime(2026, 10, 12, 9, 30, tzinfo=UTC)
+    assert set(candidates[0].as_payload()) == {
+        "url", "title", "snippet", "publisher", "published_at", "source_hint"}
+
+
+def test_brave_adapter_rejects_a_response_without_results():
+    from app.discovery import BraveSearchProvider
+
+    provider = BraveSearchProvider("k", fetcher=lambda u, h: b'{"type": "error"}',
+                                   now=lambda: BRAVE_NOW)
+    with pytest.raises(DiscoveryConfigurationError, match="no results"):
+        provider.search(SearchRequest(uuid4(), "x", BRAVE_NOW - timedelta(days=1), 5))
+
+
+@pytest.mark.parametrize("environment", [
+    {}, {"TEVARTA_SEARCH_PROVIDER": "brave"},
+    {"TEVARTA_SEARCH_PROVIDER": "other", "BRAVE_SEARCH_API_KEY": "k"},
+])
+def test_search_fails_closed_until_brave_and_its_key_are_configured(monkeypatch, environment):
+    from app.discovery import SearchProviderNotConfigured, _configured_search_service
+
+    for name in ("TEVARTA_SEARCH_PROVIDER", "BRAVE_SEARCH_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(SearchProviderNotConfigured):
+        _configured_search_service()
+
+
+def test_unconfigured_daily_sweep_is_skipped_not_failed(monkeypatch):
+    monkeypatch.delenv("TEVARTA_SEARCH_PROVIDER", raising=False)
+    assert entity_sweep.run() == 0
+
+
+def test_configured_search_uses_the_hard_monthly_cap(monkeypatch):
+    from app.discovery import BraveSearchProvider, _configured_search_service
+
+    monkeypatch.setenv("TEVARTA_SEARCH_PROVIDER", "brave")
+    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "k")
+    monkeypatch.setenv("TEVARTA_POSTGRES_URL", "postgresql://localhost/unused")
+    service = _configured_search_service()
+    assert isinstance(service.provider, BraveSearchProvider)
+    assert (service.budget.monthly_query_cap, service.budget.alert_ratio) == (1500, 0.8)

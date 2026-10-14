@@ -161,3 +161,47 @@ def test_prepared_view_is_contract_shaped_and_deterministic():
 def test_view_types_use_the_v1_vocabulary_where_it_exists():
     assert [view_type(t) for t in ("Company", "Facility", "Regulation", "MacroFactor")] == [
         "company", "place", "regulator", "macrofactor"]
+
+
+class FakeSearch:
+    def __init__(self, outcome):
+        self.outcome, self.requests = outcome, []
+
+    def search(self, request, now=None):
+        self.requests.append(request)
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+
+def targeted(search, sink=None):
+    from datetime import UTC, datetime
+
+    from app.expansion import EntityExpander
+
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    sunk = []
+    expander = EntityExpander(None, None, now=lambda: now, search=search,
+                              sink=sink if sink is not None else sunk.append)
+    return expander._targeted_search("ent_tsm", "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"), sunk
+
+
+def test_targeted_search_covers_thirty_days_and_queues_candidates():
+    from datetime import UTC, datetime
+
+    search = FakeSearch(["candidate-a", "candidate-b"])
+    status, sunk = targeted(search)
+
+    assert (status, sunk) == ("queued:2", ["candidate-a", "candidate-b"])
+    (request,) = search.requests
+    assert request.query == "TAIWAN SEMICONDUCTOR MANUFACTURING"
+    assert request.published_after == datetime(2026, 9, 13, tzinfo=UTC)
+    assert (request.max_results, request.entity_ids) == (50, ("ent_tsm",))
+
+
+def test_targeted_search_degrades_without_blocking_expansion():
+    from app.operations import SearchBudgetExceeded
+
+    assert targeted(None)[0] == "skipped"
+    assert targeted(FakeSearch(SearchBudgetExceeded("cap")))[0] == "budget_exhausted"
+    assert targeted(FakeSearch(TimeoutError("brave down")))[0] == "failed"
