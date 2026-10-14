@@ -198,17 +198,22 @@ def test_feed_entry_flows_from_poller_to_tier_without_a_body_fetch(conn):
 
 
 def test_celery_task_commits_the_tiered_article(migrated_dsn, monkeypatch):
+    from app import bodies
     from app.discovery import process_candidate
 
     with psycopg.connect(migrated_dsn) as setup:
         sync_sources(setup, [FEED])
     monkeypatch.setenv("TEVARTA_POSTGRES_URL", migrated_dsn)
+    # A tier-3 URL in the 5% audit sample is handed to the body stage (T22); no broker here.
+    queued = []
+    monkeypatch.setattr(bodies.process_article, "delay", lambda *args: queued.append(args))
     entry = candidate("Calm markets")
 
     first = process_candidate.run(entry)
     replay = process_candidate.run(entry)
 
     assert (first["tier"], first["duplicate"], replay["duplicate"]) == (3, False, True)
+    assert queued == ([(first["article_id"], "audit")] if first["body_mode"] else [])
     with psycopg.connect(migrated_dsn) as check:
         assert check.execute(
             "SELECT tier FROM articles WHERE public_id = %s", (first["public_id"],)

@@ -239,13 +239,18 @@ def vector_literal(vector: Sequence[float]) -> str:
 # --- The stage ----------------------------------------------------------------------
 
 
+MODES = ("default", "override", "audit")
+
+
 @dataclass(frozen=True)
 class BodyResult:
     article_id: str
-    tier: int
+    tier: int  # the tier after this stage (an override may promote to 1)
     fetched: str  # 'stored' | 'duplicate' | 'refused' | 'failed' | 'not_eligible'
     embedding: str  # 'body' | 'title_snippet' | 'copied' | 'none' | 'not_configured' | 'failed'
     body_entities_added: int
+    promoted: bool = False
+    audited: bool = False
 
     def as_payload(self) -> dict[str, object]:
         return self.__dict__.copy()
@@ -259,8 +264,17 @@ class BodyStage:
         self.embedder, self.now = embedder, now
         self.tagger = MetadataTagger(PostgresAliasIndex(connection))
 
-    def process(self, article_id: UUID | str, *, fetch: bool | None = None) -> BodyResult:
-        """Apply the tier's treatment. `fetch` lets T22 force or forbid a body fetch."""
+    def process(self, article_id: UUID | str, *, mode: str = "default") -> BodyResult:
+        """Apply the tier's treatment.
+
+        default  — §7.2: tier 1 body, tier 2 title+snippet embedding, tier 3 nothing.
+        override — T22 high-tier source: always fetch; a live entity in the body promotes
+                   the article to tier 1 so primary sources can reach the fast path.
+        audit    — T22 5% tier-3 sample: fetch and record what the body reveals in
+                   recall_audit; never promoted or embedded, so the measurement is pure.
+        """
+        if mode not in MODES:
+            raise ValueError(f"mode must be one of {MODES}")
         row = self.connection.execute(
             """SELECT a.url, a.title, a.snippet, a.tier, a.published_at, s.domain
                FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = %s""",
@@ -270,11 +284,9 @@ class BodyStage:
         if row is None:
             raise LookupError("article not found")
         url, title, snippet, tier, published_at, domain = row
-        should_fetch = tier == 1 if fetch is None else fetch
-        if not should_fetch:
-            embedding = (self._embed(article_id, f"{title}\n{snippet or ''}", "title_snippet")
-                         if tier == 2 else "none")
-            return BodyResult(str(article_id), tier, "not_eligible", embedding, 0)
+        if mode == "default" and tier != 1:
+            return BodyResult(str(article_id), tier, "not_eligible",
+                              self._embed_for_tier(article_id, tier, title, snippet, None), 0)
         if self.fetcher is None:
             return BodyResult(str(article_id), tier, "refused", "none", 0)
         try:
@@ -289,12 +301,20 @@ class BodyStage:
 
         fingerprint = simhash(text)
         original = self._near_duplicate(article_id, fingerprint, published_at)
-        added = self._tag_body(article_id, text, domain)
+        found, added = self._tag_body(article_id, text, domain)
+        audited = promoted = False
+        if mode == "audit":
+            audited = self._record_audit(article_id, tier, found)
+        elif mode == "override" and tier != 1 and any(
+                entity.status == "live" for entity in found):
+            self._promote(article_id)
+            tier, promoted = 1, True
+
         if original is not None:
             # Same story syndicated elsewhere: keep this article (its publisher is
             # provenance) but reuse the stored body and embedding instead of paying again.
             r2_key, embedding, scope = original
-            copy = embedding is not None and tier == 1
+            copy = embedding is not None and scope == "body" and tier == 1
             with self.connection.transaction():
                 self.connection.execute(
                     """UPDATE articles SET fetched_at = %s, simhash = %s, r2_key = %s,
@@ -302,12 +322,11 @@ class BodyStage:
                     (self.now(), fingerprint, r2_key, embedding if copy else None,
                      scope if copy else None, article_id),
                 )
-            if tier == 2:
-                return BodyResult(str(article_id), tier, "duplicate",
-                                  self._embed(article_id, f"{title}\n{snippet or ''}",
-                                              "title_snippet"), added)
-            return BodyResult(str(article_id), tier, "duplicate",
-                              "copied" if copy else "none", added)
+            embedded = "copied" if copy else (
+                "none" if tier != 2 or audited
+                else self._embed_for_tier(article_id, tier, title, snippet, None))
+            return BodyResult(str(article_id), tier, "duplicate", embedded, added,
+                              promoted, audited)
 
         key, size = self.store.put(text)
         with self.connection.transaction():
@@ -316,14 +335,32 @@ class BodyStage:
                 (self.now(), fingerprint, key, article_id),
             )
             self._meter("r2", "success", size, "byte", 0.0)
-        # The embedding follows the tier even when T22 forces a fetch (§7.2 table).
-        if tier == 1:
-            embedding = self._embed(article_id, f"{title}\n{text}", "body")
-        elif tier == 2:
-            embedding = self._embed(article_id, f"{title}\n{snippet or ''}", "title_snippet")
-        else:
-            embedding = "none"
-        return BodyResult(str(article_id), tier, "stored", embedding, added)
+        embedded = "none" if audited else self._embed_for_tier(
+            article_id, tier, title, snippet, text)
+        return BodyResult(str(article_id), tier, "stored", embedded, added, promoted, audited)
+
+    def _embed_for_tier(self, article_id: UUID | str, tier: int, title: str,
+                        snippet: str | None, body: str | None) -> str:
+        """The §7.2 embedding table: tier 1 body, tier 2 title+snippet, tier 3 none."""
+        if tier == 1 and body is not None:
+            return self._embed(article_id, f"{title}\n{body}", "body")
+        if tier == 2:
+            return self._embed(article_id, f"{title}\n{snippet or ''}", "title_snippet")
+        return "none"
+
+    def _promote(self, article_id: UUID | str) -> None:
+        with self.connection.transaction():
+            self.connection.execute("UPDATE articles SET tier = 1 WHERE id = %s", (article_id,))
+            self.connection.execute("DELETE FROM quarantine WHERE article_id = %s", (article_id,))
+
+    def _record_audit(self, article_id: UUID | str, tier: int,
+                      found: Sequence[Any]) -> bool:
+        with self.connection.transaction():
+            return self.connection.execute(
+                """INSERT INTO recall_audit (article_id, tier_assigned, entities_found_in_body)
+                   VALUES (%s, %s, %s) ON CONFLICT (article_id) DO NOTHING""",
+                (article_id, tier, sorted(entity.entity_id for entity in found)),
+            ).rowcount == 1
 
     def _near_duplicate(self, article_id: UUID | str, fingerprint: int,
                         published_at: datetime) -> tuple[str, Any, str | None] | None:
@@ -339,8 +376,9 @@ class BodyStage:
         self.connection.commit()
         return row
 
-    def _tag_body(self, article_id: UUID | str, text: str, domain: str) -> int:
-        """Body tags may add entities (§7.2); the metadata tier is never rewritten."""
+    def _tag_body(self, article_id: UUID | str, text: str,
+                  domain: str) -> tuple[tuple[Any, ...], int]:
+        """Body tags may add entities (§7.2). Returns every entity found and the count new."""
         tagging = self.tagger.tag(text[:MAX_TAGGED_CHARS], None, domain)
         added = 0
         with self.connection.transaction():
@@ -359,7 +397,7 @@ class BodyStage:
                      json.dumps({"candidates": list(ambiguity.candidates), "stage": "body"}),
                      article_id),
                 )
-        return added
+        return tagging.entities, added
 
     def _embed(self, article_id: UUID | str, text: str, scope: str) -> str:
         if self.embedder is None:
@@ -423,6 +461,6 @@ def body_stage_from_env(connection: psycopg.Connection[Any]) -> BodyStage:
 
 
 @celery_app.task(name="app.bodies.process_article")
-def process_article(article_id: str) -> dict[str, object]:
+def process_article(article_id: str, mode: str = "default") -> dict[str, object]:
     with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
-        return body_stage_from_env(connection).process(article_id).as_payload()
+        return body_stage_from_env(connection).process(article_id, mode=mode).as_payload()
