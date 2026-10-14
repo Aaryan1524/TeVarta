@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 QUARANTINE_TTL = timedelta(days=30)
 TIER3_TTL = timedelta(hours=48)
+# URL tombstones outlive the metadata they guard; feeds list items for days to weeks.
+SEEN_URL_TTL = timedelta(days=30)
 HIGH_TIER_VALUE = 0.9
 AUDIT_RATE_PERCENT = 5
 
@@ -74,6 +76,7 @@ def quarantine_article(connection: psycopg.Connection[Any], article_id: Any,
 class PurgeReport:
     tier2: int
     tier3: int
+    tombstones: int = 0
 
 
 def purge_expired(connection: psycopg.Connection[Any], now: datetime) -> PurgeReport:
@@ -89,8 +92,11 @@ def purge_expired(connection: psycopg.Connection[Any], now: datetime) -> PurgeRe
                RETURNING a.tier""",
             {"tier3_cutoff": now - TIER3_TTL, "tier2_cutoff": now - QUARANTINE_TTL},
         ).fetchall()
+        tombstones = connection.execute(
+            "DELETE FROM seen_urls WHERE first_seen < %s", (now - SEEN_URL_TTL,)
+        ).rowcount
     tiers = [row[0] for row in rows]
-    report = PurgeReport(tiers.count(2), tiers.count(3))
+    report = PurgeReport(tiers.count(2), tiers.count(3), tombstones)
     logger.info("expired articles purged", extra=report.__dict__)
     return report
 
