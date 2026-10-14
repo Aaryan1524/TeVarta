@@ -6,7 +6,7 @@ task_always_eager = os.getenv("TEVARTA_CELERY_EAGER", "false").lower() == "true"
 task_serializer = "json"
 result_serializer = "json"
 accept_content = ["json"]
-imports = ("app.discovery", "app.expansion")
+imports = ("app.discovery", "app.expansion", "app.bodies")
 beat_schedule = {
     "poll-sources-every-five-minutes": {
         "task": "app.discovery.poll_sources",
