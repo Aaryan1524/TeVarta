@@ -31,13 +31,15 @@ def dsn(migrated_url):
             """INSERT INTO entities (entity_id, canonical_name, type, status) VALUES
                ('ent_t22_taiwan', 'Taiwan', 'Country', 'live'),
                ('ent_t22_sandisk', 'SanDisk Corp', 'Company', 'catalog'),
-               ('ent_t22_kioxia', 'Kioxia Holdings', 'Company', 'catalog')"""
+               ('ent_t22_kioxia', 'Kioxia Holdings', 'Company', 'catalog'),
+               ('ent_t22_tsmc', 'TSMC', 'Company', 'live')"""
         )
         connection.execute(
             """INSERT INTO entity_aliases VALUES
                ('taiwan', 'ent_t22_taiwan', 'test', 1, false),
                ('sandisk', 'ent_t22_sandisk', 'test', 1, false),
-               ('kioxia', 'ent_t22_kioxia', 'test', 1, false)"""
+               ('kioxia', 'ent_t22_kioxia', 'test', 1, false),
+               ('tsmc', 'ent_t22_tsmc', 'test', 1, false)"""
         )
     return value
 
@@ -146,7 +148,9 @@ def body_stage(dsn, tmp_path, text):
 def test_a_primary_source_naming_a_live_entity_in_its_body_is_promoted(dsn, tmp_path):
     filing = ingest(dsn, "SanDisk files current report", source="t22_sec")
     assert filing.tier == 2
-    connection, stage = body_stage(dsn, tmp_path, "Production in Taiwan was disrupted.")
+    connection, stage = body_stage(
+        dsn, tmp_path, "TSMC said wafer supply was disrupted. TSMC expects delays. "
+                       "Customers of TSMC were notified.")
     with connection:
         result = stage.process(filing.article_id, mode="override")
     assert (result.promoted, result.tier, result.embedding) == (True, 1, "body")
@@ -154,6 +158,24 @@ def test_a_primary_source_naming_a_live_entity_in_its_body_is_promoted(dsn, tmp_
                filing.article_id) == (1, "body")
     assert one(dsn, "SELECT count(*) FROM quarantine WHERE article_id = %s",
                filing.article_id) == (0,)
+
+
+def test_a_passing_mention_of_a_live_company_does_not_promote(dsn, tmp_path):
+    # Attendee lists and asides name a company once; the subject of a filing recurs.
+    filing = ingest(dsn, "SanDisk files committee minutes", source="t22_sec")
+    connection, stage = body_stage(dsn, tmp_path, "Members present included TSMC and others.")
+    with connection:
+        result = stage.process(filing.article_id, mode="override")
+    assert (result.promoted, result.tier) == (False, 2)
+
+
+def test_a_live_country_only_in_the_body_does_not_promote(dsn, tmp_path):
+    # Countries appear in nearly every filing's risk factors; only headlines promote them.
+    filing = ingest(dsn, "SanDisk files quarterly notice", source="t22_sec")
+    connection, stage = body_stage(dsn, tmp_path, "Operations in Taiwan continued normally.")
+    with connection:
+        result = stage.process(filing.article_id, mode="override")
+    assert (result.promoted, result.tier) == (False, 2)
 
 
 def test_a_primary_source_without_live_entities_keeps_its_tier(dsn, tmp_path):

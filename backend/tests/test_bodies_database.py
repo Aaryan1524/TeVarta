@@ -153,6 +153,19 @@ def test_a_syndicated_copy_reuses_the_stored_body_and_embedding(catalog, tmp_pat
     assert row(catalog, copy_id)[1:] == row(catalog, first_id)[1:]
 
 
+def test_identical_bodies_under_unrelated_headlines_are_not_duplicates(catalog, tmp_path):
+    # A block page or template shell repeated across documents is not syndication.
+    first_id, first_url, _ = article(catalog, "Taiwan exchange notice on margin rules")
+    other_id, other_url, _ = article(catalog, "Taiwan customs updates tariff schedule")
+    embedder, body = Embedder(), unique_body()
+    connection, body_stage, _ = stage(catalog, tmp_path, {first_url: body, other_url: body},
+                                      embedder)
+    with connection:
+        body_stage.process(first_id)
+        result = body_stage.process(other_id)
+    assert result.fetched == "stored" and len(embedder.calls) == 2
+
+
 def test_tier_two_embeds_title_and_snippet_without_fetching(catalog, tmp_path):
     article_id, url, tier = article(catalog, "SanDisk expands output", "New flash capacity.")
     embedder = Embedder()
@@ -197,8 +210,11 @@ def test_refused_and_failed_fetches_leave_the_article_unfetched(catalog, tmp_pat
         refused = body_stage.process(refused_id)
         failed = body_stage.process(failed_id)
     assert (refused.fetched, failed.fetched) == ("refused", "failed")
-    assert embedder.calls == []
+    # No body, but tier 1 must stay clusterable: title+snippet embedding instead.
+    assert (refused.embedding, failed.embedding) == ("title_snippet", "title_snippet")
+    assert embedder.calls == ["Taiwan port reopens\n", "Taiwan rail resumes\n"]
     assert row(catalog, refused_id)[0] is False and row(catalog, failed_id)[0] is False
+    assert row(catalog, refused_id)[4] == "title_snippet"
 
 
 def test_missing_or_failing_embedder_still_stores_the_body(catalog, tmp_path):

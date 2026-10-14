@@ -118,16 +118,18 @@ sources:
     access_note: "api.weather.gov robots.txt disallows all agents (2026-10-14): keep disabled."
     evidence_url: "https://www.weather.gov/documentation/services-web-api"
 
-  - id: ecb_market_information
-    domain: mid.ecb.europa.eu
-    feed_url: "https://mid.ecb.europa.eu/rss/mid.xml"
+  - id: ecb_press
+    domain: ecb.europa.eu
+    # Press releases, speeches and policy decisions. The former mid.ecb.europa.eu feed
+    # carried machine operational messages (TIPS/T2 status), not news (2026-10-14).
+    feed_url: "https://www.ecb.europa.eu/rss/press.html"
     publisher_group: european_central_bank
     tier_value: 1.0
     reliability: 0.99
     poll_interval_s: 300
     active: false
     ingestion_mode: rss
-    evidence_url: "https://www.ecb.europa.eu/press/shared/pdf/MID-Catalogue-and-Integration-Guide.en.pdf"
+    evidence_url: "https://www.ecb.europa.eu/home/html/rss.en.html"
 
   - id: bank_of_england_news
     domain: bankofengland.co.uk

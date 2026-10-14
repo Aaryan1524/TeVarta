@@ -40,6 +40,29 @@ MAX_EMBEDDED_CHARS = 24_000  # ~6k tokens, inside the model's 8,191-token input
 EMBEDDING_DIMENSIONS = 1024  # frozen VECTOR(1024); decisions.md 2026-09-12
 SIMHASH_MAX_DISTANCE = 12  # measured: near-duplicates <= 10 bits, unrelated >= 21 (decisions.md)
 SIMHASH_WINDOW = timedelta(days=7)
+# Less text than this is a script-rendered shell ("this application supports most
+# recent browsers"), not an article: identical across pages, so never stored or compared.
+MIN_BODY_CHARS = 300
+# Only a specific live subject in a body promotes a primary-source article; countries,
+# industries and commodities appear in nearly every filing's boilerplate.
+PROMOTING_TYPES = ("Company", "Security", "Facility", "Product")
+# ...and only when the body is about it: attendee lists and passing references name a
+# company once or twice, while a company's own release or filing names it repeatedly.
+PROMOTION_MIN_MENTIONS = 3
+# A body near-duplicate is a copy of the same story only if the headlines agree too:
+# blocked or templated pages are near-identical across unrelated documents.
+TITLE_MATCH_MIN = 0.5
+_TITLE_PREFIX = re.compile(r"^(update|refile|corrected|correction)\s*\d*\s*[-:]\s*")
+_TITLE_STOPWORDS = frozenset({"the", "a", "an", "of", "to", "in", "on", "for", "and", "at"})
+
+
+def title_similarity(left: str, right: str) -> float:
+    """Token Jaccard of two headlines, ignoring wire prefixes such as "UPDATE 1-"."""
+    def tokens(title: str) -> set[str]:
+        title = _TITLE_PREFIX.sub("", title.casefold().strip())
+        return set(re.findall(r"[a-z0-9]+", title)) - _TITLE_STOPWORDS
+    a, b = tokens(left), tokens(right)
+    return len(a & b) / len(a | b) if a | b else 0.0
 
 
 class BodyFetchRefused(RuntimeError):
@@ -101,14 +124,15 @@ class RobotsPolicy:
         return cached[1].can_fetch(self.user_agent, url)
 
 
-_DROP = re.compile(r"(?is)<(script|style|noscript|nav|header|footer|aside|form|svg)\b.*?</\1>")
+_DROP = re.compile(r"(?is)<(head|script|style|noscript|nav|header|footer|aside|form|svg)\b.*?</\1>")
 
 
 def extract_text(content: bytes, content_type: str) -> str:
     """Readable text from an HTML or plain-text document."""
     charset = re.search(r"charset=([\w-]+)", content_type, flags=re.IGNORECASE)
     text = content.decode(charset.group(1) if charset else "utf-8", "replace")
-    if "html" in content_type.lower() or "<html" in text[:1000].lower():
+    kind = content_type.lower()
+    if "html" in kind or "xml" in kind or text.lstrip()[:1].startswith("<"):
         text = _DROP.sub(" ", text)
         text = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</h\d>|</li>", "\n", text)
         text = re.sub(r"<[^>]+>", " ", text)
@@ -117,11 +141,80 @@ def extract_text(content: bytes, content_type: str) -> str:
     return "\n".join(line for line in lines if line)[:MAX_STORED_CHARS]
 
 
+# EDGAR feed links point at a filing's index page, a table of documents. The filing's
+# substance is the primary form document plus its press-release exhibits (EX-99.x,
+# where foreign issuers' 6-Ks carry the news).
+_SEC_INDEX = re.compile(
+    r"^https://(www\.)?sec\.gov/Archives/edgar/data/\d+/\d+/[\w-]+-index\.html?$",
+    flags=re.IGNORECASE,
+)
+_SEC_PRIMARY = re.compile(r"^(8-K|6-K|10-K|10-Q|20-F|40-F)(/A)?$")
+_SEC_PRESS_EXHIBIT = re.compile(r"^EX-99(\.\d+)?$")
+MAX_SEC_DOCUMENTS = 3
+
+
+def sec_filing_documents(index_html: str) -> list[str]:
+    """The primary form document first, then press-release exhibits; at most three."""
+    primary, exhibits = [], []
+    for row in re.findall(r"(?is)<tr[^>]*>(.*?)</tr>", index_html):
+        cells = re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)
+        if len(cells) < 4:
+            continue
+        link = re.search(r'href="([^"]+)"', cells[2])
+        kind = html.unescape(re.sub(r"<[^>]+>", "", cells[3])).strip()
+        if not link:
+            continue
+        href = link.group(1).removeprefix("/ix?doc=")
+        if not href.startswith("/Archives/") or not href.lower().endswith((".htm", ".html")):
+            continue
+        if _SEC_PRIMARY.match(kind):
+            primary.append(f"https://www.sec.gov{href}")
+        elif _SEC_PRESS_EXHIBIT.match(kind):
+            exhibits.append(f"https://www.sec.gov{href}")
+    return (primary + exhibits)[:MAX_SEC_DOCUMENTS]
+
+
+# FederalRegister.gov blocks automated HTML requests ("programmatic access ... is limited
+# to ... developer APIs"); the document text is published at a predictable full-text path.
+_FEDERAL_REGISTER_DOCUMENT = re.compile(
+    r"^https://www\.federalregister\.gov/documents/(\d{4})/(\d{2})/(\d{2})/([0-9A-Za-z-]+)(/|$)"
+)
+
+
+def federal_register_text_url(url: str) -> str | None:
+    match = _FEDERAL_REGISTER_DOCUMENT.match(url)
+    if not match:
+        return None
+    year, month, day, number = match.group(1, 2, 3, 4)
+    return (f"https://www.federalregister.gov/documents/full_text/text/"
+            f"{year}/{month}/{day}/{number}.txt")
+
+
 class BodyFetcher:
     def __init__(self, get: HttpGet, robots: RobotsPolicy, user_agent: str) -> None:
         self.get, self.robots, self.user_agent = get, robots, user_agent
 
     def fetch(self, url: str) -> str:
+        url = federal_register_text_url(url) or url
+        content_type, content = self._get(url)
+        if _SEC_INDEX.match(url):
+            documents = sec_filing_documents(content.decode("utf-8", "replace"))
+            texts = []
+            for document in documents:
+                try:
+                    document_type, document_content = self._get(document)
+                except BodyFetchRefused:
+                    continue
+                texts.append(extract_text(document_content, document_type))
+            text = "\n\n".join(part for part in texts if part)[:MAX_STORED_CHARS]
+            if len(text) >= MIN_BODY_CHARS:
+                return text
+        text = extract_text(content, content_type)
+        if len(text) < MIN_BODY_CHARS:
+            raise BodyFetchRefused("no usable text (empty or script-rendered page)")
+        return text
+
+    def _get(self, url: str) -> tuple[str, bytes]:
         if not self.robots.allowed(url):
             raise BodyFetchRefused("robots.txt disallows this URL")
         status, content_type, content = self.get(
@@ -131,10 +224,7 @@ class BodyFetcher:
         kind = content_type.lower()
         if kind and not any(t in kind for t in ("html", "text/plain", "xml")):
             raise BodyFetchRefused("not a text document")
-        text = extract_text(content, content_type)
-        if not text:
-            raise BodyFetchRefused("empty document")
-        return text
+        return content_type, content
 
 
 # --- SimHash ------------------------------------------------------------------------
@@ -292,25 +382,24 @@ class BodyStage:
             return BodyResult(str(article_id), tier, "not_eligible",
                               self._embed_for_tier(article_id, tier, title, snippet, None), 0)
         if self.fetcher is None:
-            return BodyResult(str(article_id), tier, "refused", "none", 0)
+            return self._without_body(article_id, tier, mode, title, snippet, "refused")
         try:
             text = self.fetcher.fetch(url)
         except BodyFetchRefused as refusal:
             logger.info("body not fetched", extra={"article_id": str(article_id),
                                                    "reason": str(refusal)})
-            return BodyResult(str(article_id), tier, "refused", "none", 0)
+            return self._without_body(article_id, tier, mode, title, snippet, "refused")
         except Exception:
             logger.warning("body fetch failed", extra={"article_id": str(article_id)})
-            return BodyResult(str(article_id), tier, "failed", "none", 0)
+            return self._without_body(article_id, tier, mode, title, snippet, "failed")
 
         fingerprint = simhash(text)
-        original = self._near_duplicate(article_id, fingerprint, published_at)
+        original = self._near_duplicate(article_id, fingerprint, published_at, title)
         found, added = self._tag_body(article_id, text, domain)
         audited = promoted = False
         if mode == "audit":
             audited = self._record_audit(article_id, tier, found)
-        elif mode == "override" and tier != 1 and any(
-                entity.status == "live" for entity in found):
+        elif mode == "override" and tier != 1 and self._names_live_subject(found):
             self._promote(article_id)
             tier, promoted = 1, True
 
@@ -343,6 +432,27 @@ class BodyStage:
             article_id, tier, title, snippet, text)
         return BodyResult(str(article_id), tier, "stored", embedded, added, promoted, audited)
 
+    def _without_body(self, article_id: UUID | str, tier: int, mode: str, title: str,
+                      snippet: str | None, fetched: str) -> BodyResult:
+        """No usable body: tier 1 and 2 still get a title+snippet embedding so they
+        stay clusterable; the audit sample is never embedded."""
+        embedded = "none"
+        if mode != "audit" and tier in (1, 2):
+            embedded = self._embed(article_id, f"{title}\n{snippet or ''}", "title_snippet")
+        return BodyResult(str(article_id), tier, fetched, embedded, 0)
+
+    def _names_live_subject(self, found: Sequence[Any]) -> bool:
+        live = [entity.entity_id for entity in found
+                if entity.status == "live" and entity.mentions >= PROMOTION_MIN_MENTIONS]
+        if not live:
+            return False
+        row = self.connection.execute(
+            "SELECT 1 FROM entities WHERE entity_id = ANY(%s) AND type = ANY(%s) LIMIT 1",
+            (live, list(PROMOTING_TYPES)),
+        ).fetchone()
+        self.connection.commit()
+        return row is not None
+
     def _embed_for_tier(self, article_id: UUID | str, tier: int, title: str,
                         snippet: str | None, body: str | None) -> str:
         """The §7.2 embedding table: tier 1 body, tier 2 title+snippet, tier 3 none."""
@@ -367,18 +477,21 @@ class BodyStage:
             ).rowcount == 1
 
     def _near_duplicate(self, article_id: UUID | str, fingerprint: int,
-                        published_at: datetime) -> tuple[str, Any, str | None] | None:
-        row = self.connection.execute(
-            """SELECT r2_key, embedding, embedding_scope FROM articles
+                        published_at: datetime, title: str) -> tuple[str, Any, str | None] | None:
+        rows = self.connection.execute(
+            """SELECT r2_key, embedding, embedding_scope, title FROM articles
                WHERE id <> %s AND simhash IS NOT NULL AND r2_key IS NOT NULL
                  AND published_at BETWEEN %s AND %s
                  AND bit_count((simhash # %s)::bit(64)) <= %s
-               ORDER BY bit_count((simhash # %s)::bit(64)), fetched_at LIMIT 1""",
+               ORDER BY bit_count((simhash # %s)::bit(64)), fetched_at LIMIT 20""",
             (article_id, published_at - SIMHASH_WINDOW, published_at + SIMHASH_WINDOW,
              fingerprint, SIMHASH_MAX_DISTANCE, fingerprint),
-        ).fetchone()
+        ).fetchall()
         self.connection.commit()
-        return row
+        for r2_key, embedding, scope, other_title in rows:
+            if title_similarity(title, other_title) >= TITLE_MATCH_MIN:
+                return r2_key, embedding, scope
+        return None
 
     def _tag_body(self, article_id: UUID | str, text: str,
                   domain: str) -> tuple[tuple[Any, ...], int]:

@@ -74,6 +74,7 @@ class FakeWeb:
 
 
 NOW = datetime(2026, 10, 13, tzinfo=UTC)
+DETAIL = " Supply was tight across the region as plants restarted." * 8  # > MIN_BODY_CHARS
 
 
 def policy(robots_status, robots_body=b"", clock=lambda: NOW):
@@ -115,13 +116,18 @@ def fetcher(pages, robots_body=b""):
 
 def test_fetch_sends_the_declared_agent_and_returns_text():
     body_fetcher, web = fetcher({"https://news.example.org/a": (
-        200, "text/html", b"<p>Fab output fell.</p>")})
-    assert body_fetcher.fetch("https://news.example.org/a") == "Fab output fell."
+        200, "text/html", f"<p>Fab output fell.{DETAIL}</p>".encode())})
+    assert body_fetcher.fetch("https://news.example.org/a") == "Fab output fell." + DETAIL
     assert web.requests[-1][1]["User-Agent"] == "TeVarta/1.0 (ops@tevarta.com)"
 
 
+SCRIPT_SHELL = (b"<html><body><p>The Earthquake Event Page application supports most recent "
+                b"browsers, view supported browsers.</p><script>app()</script></body></html>")
+
+
 @pytest.mark.parametrize("page", [(404, "text/html", b""), (200, "application/pdf", b"%PDF"),
-                                  (200, "text/html", b"<script>x()</script>")])
+                                  (200, "text/html", b"<script>x()</script>"),
+                                  (200, "text/html", SCRIPT_SHELL)])
 def test_unusable_responses_are_refused(page):
     body_fetcher, _ = fetcher({"https://news.example.org/a": page})
     with pytest.raises(BodyFetchRefused):
@@ -175,3 +181,92 @@ def test_embeddings_fail_closed_without_a_key_and_a_price(environ):
 def test_configured_embedder_defaults_to_the_recorded_model():
     embedder = embedder_from_env({"OPENAI_API_KEY": "sk", "TEVARTA_EMBEDDING_USD_PER_MTOK": "0.02"})
     assert (embedder.model, embedder.usd_per_mtok) == ("text-embedding-3-small", 0.02)
+
+
+FILING = "/Archives/edgar/data/1701756/000173112226001341/"
+
+
+def sec_index(form, primary, exhibit_type, exhibit):
+    """A filing index table shaped like EDGAR's (Seq, Description, Document, Type, Size)."""
+    def row(link, kind):
+        return (f'<tr><td scope="row">1</td><td scope="row">doc</td>'
+                f'<td scope="row"><a href="{link}">x</a></td>'
+                f'<td scope="row">{kind}</td><td scope="row">1</td></tr>')
+    return ("<table><tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th></tr>"
+            + row(f"/ix?doc={FILING}{primary}", form) + row(FILING + exhibit, exhibit_type)
+            + row(FILING + "submission.txt", "&nbsp;") + "</table>")
+
+
+SEC_8K_INDEX = sec_index("8-K", "e8005_8-k.htm", "EX-10.1", "e8005_ex10-1.htm")
+SEC_6K_INDEX = sec_index("6-K", "form6-k.htm", "EX-99.1", "ex99-1.htm")
+INDEX_URL = f"https://www.sec.gov{FILING}0001731122-26-001341-index.htm"
+
+
+def test_sec_index_yields_the_primary_document_then_press_exhibits():
+    from app.bodies import sec_filing_documents
+
+    assert sec_filing_documents(SEC_8K_INDEX) == [f"https://www.sec.gov{FILING}e8005_8-k.htm"]
+    assert sec_filing_documents(SEC_6K_INDEX) == [
+        f"https://www.sec.gov{FILING}form6-k.htm", f"https://www.sec.gov{FILING}ex99-1.htm"]
+
+
+def sec_fetcher(pages, robots_body=b""):
+    web = FakeWeb({"https://www.sec.gov/robots.txt": (200, "text/plain", robots_body), **pages})
+    agent = "TeVarta/1.0 (ops@tevarta.com)"
+    return BodyFetcher(web, RobotsPolicy(web, agent, now=lambda: NOW), agent), web
+
+
+def test_an_sec_filing_body_is_its_documents_not_its_index_page():
+    base = f"https://www.sec.gov{FILING}"
+    body_fetcher, web = sec_fetcher({
+        INDEX_URL: (200, "text/html", SEC_6K_INDEX.encode()),
+        base + "form6-k.htm": (200, "text/html", b"<p>Form 6-K cover.</p>"),
+        base + "ex99-1.htm": (200, "text/html",
+                              f"<p>TSMC reports record revenue.{DETAIL}</p>".encode()),
+    })
+    expected = "Form 6-K cover.\n\nTSMC reports record revenue." + DETAIL
+    assert body_fetcher.fetch(INDEX_URL) == expected
+
+
+def test_an_sec_index_without_readable_documents_falls_back_to_the_index_text():
+    body_fetcher, _ = sec_fetcher({INDEX_URL: (200, "text/html",
+                                               f"<p>Filing index{DETAIL}</p>".encode())})
+    assert body_fetcher.fetch(INDEX_URL) == "Filing index" + DETAIL
+
+
+def test_sec_documents_disallowed_by_robots_are_skipped():
+    body_fetcher, web = sec_fetcher(
+        {INDEX_URL: (200, "text/html", SEC_8K_INDEX.encode())},
+        f"User-agent: *\nDisallow: {FILING}e8005\n".encode())
+    with pytest.raises(BodyFetchRefused, match="no usable text"):
+        body_fetcher.fetch(INDEX_URL)  # the index table alone is not a body
+    assert "e8005_8-k.htm" not in [url.rsplit("/", 1)[-1] for url, _ in web.requests]
+
+
+def test_title_similarity_ignores_wire_prefixes_and_separates_documents():
+    from app.bodies import TITLE_MATCH_MIN, title_similarity
+
+    story = "TSMC raises prices for advanced chips"
+    assert title_similarity(story, "UPDATE 2-TSMC raises prices for advanced chips") == 1.0
+    assert title_similarity(story, "TSMC raises prices on advanced chips, sources say") >= (
+        TITLE_MATCH_MIN)
+    assert title_similarity("Self-Regulatory Organizations; Cboe BYX Exchange",
+                            "Joint Industry Plan; Notice of Filing") < TITLE_MATCH_MIN
+
+
+def test_federal_register_documents_are_read_from_their_full_text_path():
+    from app.bodies import federal_register_text_url
+
+    page = ("https://www.federalregister.gov/documents/2026/10/13/2026-20969/"
+            "national-energy-dominance-month-2026")
+    text_url = "https://www.federalregister.gov/documents/full_text/text/2026/10/13/2026-20969.txt"
+    assert federal_register_text_url(page) == text_url
+    assert federal_register_text_url("https://news.example.org/documents/a") is None
+
+    # The real full-text response is HTML-wrapped plain text, served as text/plain.
+    raw = f"<html><head><title>FR</title></head><body><pre>Proclamation text.{DETAIL}</pre>"
+    web = FakeWeb({"https://www.federalregister.gov/robots.txt": (200, "text/plain", b""),
+                   text_url: (200, "text/plain", raw.encode())})
+    agent = "TeVarta/1.0 (ops@tevarta.com)"
+    body = BodyFetcher(web, RobotsPolicy(web, agent, now=lambda: NOW), agent).fetch(page)
+    assert body.startswith("Proclamation text.") and page not in [u for u, _ in web.requests]

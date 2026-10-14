@@ -74,3 +74,18 @@ never loses the stored body.
   - refused and failed fetches;
   - a missing or failing embedder still keeping the body;
   - T20 queuing tier 1 and 2 only.
+
+## Real-data hardening (2026-10-14)
+
+A real feed run into the development database (411 articles) found problems no
+fixture showed:
+
+| Found | Rule now |
+|---|---|
+| Script-rendered pages (USGS) all extract to the same 157-character shell, so distinct quakes looked like duplicates | Under 300 characters is "no usable text": refused, never stored or compared |
+| Federal Register returns a bot-block page for every document | Read the published full-text path instead |
+| SEC links are filing index pages, so the body was a table of links | Fetch the primary form document plus EX-99 exhibits (at most 3) |
+| Identical block or template pages under unrelated headlines were "near duplicates" | Near-duplicate also requires headline token Jaccard ≥ 0.5 (ignoring "UPDATE n-") |
+| A tier-1 article with no usable body had no embedding, so it could not be clustered | Fall back to a title+snippet embedding (never for the audit sample) |
+| `<head>` and XML markup leaked into body text | `<head>` dropped; XML stripped like HTML |
+
