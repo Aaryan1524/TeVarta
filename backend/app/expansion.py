@@ -32,7 +32,6 @@ from app.graph_store import GraphStore, GraphWriteError, TemporalEdgeRevision, U
 from app.onboarding import API_TYPES
 from app.operations import SearchBudgetExceeded
 from app.scoring import MAX_HOPS, PATH_SCORE_FLOOR, confidence, path_score
-from app.sec_catalog import CatalogInputError, normalize_alias
 from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
@@ -438,21 +437,13 @@ class EntityExpander:
         if industry.entity_id in current:
             return "present"
         with self.connection.transaction():
+            # No name alias: SIC descriptions are common nouns ("Aircraft") and would tag
+            # every airworthiness directive as tier 1. Industries are graph structure only.
             self.connection.execute(
                 """INSERT INTO entities (entity_id, canonical_name, type, status)
                    VALUES (%s, %s, 'Industry', 'catalog') ON CONFLICT (entity_id) DO NOTHING""",
                 (industry.entity_id, industry.name),
             )
-            try:
-                alias = normalize_alias(industry.description)
-            except CatalogInputError:
-                alias = None
-            if alias:
-                self.connection.execute(
-                    """INSERT INTO entity_aliases (alias_norm, entity_id, source, confidence)
-                       VALUES (%s, %s, 'edgar_sic', 0.7) ON CONFLICT DO NOTHING""",
-                    (alias, industry.entity_id),
-                )
         try:
             self.graph.upsert_entity(industry.entity_id, industry.name, "Industry")
             self._write_industry_edge(entity_id, industry, cik, created_at)

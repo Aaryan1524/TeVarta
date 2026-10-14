@@ -135,6 +135,11 @@ def test_first_seed_builds_one_shared_live_graph_and_unlocks_tier_one(
     names = {node.id: (node.name, node.entity_type) for node in view.nodes}
     assert names[ids["taiwan"]] == ("Taiwan", "place")
     assert names["ent_sic_3674"] == ("Semiconductors & Related Devices", "industry")
+    with psycopg.connect(migrated_dsn) as connection:
+        # Industries are graph structure only: "Aircraft" must never tag a headline.
+        assert connection.execute(
+            "SELECT count(*) FROM entity_aliases WHERE entity_id = 'ent_sic_3674'"
+        ).fetchone() == (0,)
     assert {(e.source_id, e.relation, e.target_id) for e in view.edges} == {
         (ids["tsmc"], "EXPOSED_TO", ids["taiwan"]), (ids["tsmc"], "IN_INDUSTRY", "ent_sic_3674")}
 

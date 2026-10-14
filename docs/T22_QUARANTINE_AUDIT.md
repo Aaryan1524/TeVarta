@@ -11,7 +11,7 @@
 | Article | Mode | What happens (T21 body stage) |
 |---|---|---|
 | tier 1 | `default` | body fetched, body embedding |
-| `tier_value ≥ 0.9`, tier 2/3 | `override` | body always fetched; a **live** entity in the body promotes it to tier 1 (quarantine row removed, body embedding) |
+| `tier_value ≥ 0.9`, tier 2/3 | `override` | body always fetched; a live **company, security, facility or product named at least 3 times** in the body promotes it to tier 1 (quarantine row removed, body embedding) |
 | tier 2 | `default` | title + snippet embedding, no fetch |
 | tier 3, in the 5% sample | `audit` | body fetched and tagged; `recall_audit` stores the original tier and every entity found; never promoted or embedded |
 | other tier 3 | — | metadata only |
@@ -22,7 +22,11 @@ always in or out of it.
 **Why the override promotes.** §7.2 always fetches primary sources because they
 trigger the §8.1 fast path. An 8-K whose title names only catalog entities would
 otherwise stay quarantined even when its body names a live company, which defeats
-the purpose. The audit never promotes, so §17's tier-3 measurement stays clean.
+the purpose. The audit never promotes, so §17's tier-3 measurement stays clean. The
+real-data run narrowed the rule. Countries appear in nearly every filing's risk
+factors, and Bank of England minutes name banks once each in attendee lists, so only
+a specific live subject that the body keeps returning to promotes. Broad entities
+still reach tier 1 from headlines (§7.3).
 
 ## Quarantine and demand
 
