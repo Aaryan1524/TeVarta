@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import ssl
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -21,6 +22,7 @@ from typing import Protocol
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID, uuid4
 
+import certifi
 import psycopg
 import yaml
 
@@ -116,9 +118,20 @@ class UrlFetcher(Protocol):
     def __call__(self, url: str, headers: Mapping[str, str]) -> bytes: ...
 
 
+def tls_context() -> ssl.SSLContext:
+    """Mozilla's CA bundle (certifi), so verification does not depend on the host OS store.
+
+    The macOS Python trust store rejects valid chains such as the ECB's that
+    certifi accepts; production and laptops must verify identically.
+    """
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 def fetch_url(url: str, headers: Mapping[str, str]) -> bytes:
     request = urllib.request.Request(url, headers=dict(headers))
-    with urllib.request.urlopen(request, timeout=20) as response:  # nosec B310 -- curated HTTPS URLs
+    with urllib.request.urlopen(  # nosec B310 -- curated HTTPS URLs
+        request, timeout=20, context=tls_context()
+    ) as response:
         return response.read()
 
 
@@ -250,7 +263,10 @@ class FeedPoller:
         content = self.fetcher(
             source.feed_url,
             {
-                "Accept": "application/atom+xml, application/rss+xml, application/json",
+                # Many RSS feeds are served as text/xml or application/xml (EIA returns 406
+                # to an Accept header without them).
+                "Accept": ("application/atom+xml, application/rss+xml, application/xml, "
+                           "text/xml, application/json;q=0.9, */*;q=0.1"),
                 "User-Agent": self.user_agent,
             },
         )

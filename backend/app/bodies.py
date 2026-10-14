@@ -59,9 +59,13 @@ class HttpGet(Protocol):
 
 def http_get(url: str, headers: Mapping[str, str]) -> tuple[int, str, bytes]:
     """Status, content type, and at most MAX_BODY_BYTES of the response."""
+    from app.discovery import tls_context
+
     request = urllib.request.Request(url, headers=dict(headers))
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:  # nosec B310
+        with urllib.request.urlopen(  # nosec B310
+            request, timeout=20, context=tls_context()
+        ) as response:
             return (response.status, response.headers.get("Content-Type", ""),
                     response.read(MAX_BODY_BYTES))
     except urllib.error.HTTPError as error:
