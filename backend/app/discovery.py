@@ -441,17 +441,27 @@ def _configured_search_service() -> SearchService:
 
 @celery_app.task(name="app.discovery.process_candidate")
 def process_candidate(candidate: dict[str, object]) -> dict[str, object]:
-    """Stable T19 handoff; T20 owns dedupe, tagging, and tiering."""
-    return candidate
+    """T20 metadata stage: dedupe, tag, and tier one candidate. Never fetches a body."""
+    from app.ingest import MetadataStage
+
+    with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
+        return MetadataStage(connection).process(candidate).as_payload()
 
 
 @celery_app.task(name="app.discovery.poll_sources")
 def poll_sources() -> int:
+    from app.ingest import sync_sources
+
     sources_path = Path(os.getenv("TEVARTA_SOURCES_CONFIG", DEFAULT_SOURCES_PATH))
-    active = [source for source in load_sources(sources_path) if source.active]
+    sources = load_sources(sources_path)
+    active = [source for source in sources if source.active]
     if not active:
         return 0
-    candidates = FeedPoller(user_agent=declared_user_agent()).poll_active(active)
+    poller = FeedPoller(user_agent=declared_user_agent())
+    # Articles reference `sources` rows, so the registry is mirrored before any candidate.
+    with psycopg.connect(os.environ["TEVARTA_POSTGRES_URL"]) as connection:
+        sync_sources(connection, sources)
+    candidates = poller.poll_active(active)
     for candidate in candidates:
         process_candidate.delay(candidate.as_payload())
     return len(candidates)
