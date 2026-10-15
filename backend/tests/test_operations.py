@@ -246,3 +246,17 @@ def test_development_serves_plain_http_without_transport_middleware() -> None:
 
     assert response.status_code == 200
     assert "strict-transport-security" not in response.headers
+
+
+def test_health_probes_are_not_redirected_but_everything_else_is() -> None:
+    app = transport_app()
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    client = TestClient(app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 5000))
+
+    assert client.get("/health", follow_redirects=False).status_code == 200
+    redirected = client.get("/whoami", follow_redirects=False)
+    assert redirected.status_code == 307 and redirected.headers["location"].startswith("https://")
