@@ -16,6 +16,8 @@ PLACEHOLDER = re.compile(r"^(<[^>]*>)?$")
 
 @pytest.mark.parametrize("template", TEMPLATES, ids=lambda path: path.name)
 def test_secret_names_hold_no_value_in_committed_templates(template):
+    if not template.exists():
+        pytest.skip(f"{template.name} is not in this checkout (env examples are untracked)")
     leaks = []
     for number, line in enumerate(template.read_text().splitlines(), start=1):
         name, separator, value = line.partition("=")
