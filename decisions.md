@@ -51,15 +51,8 @@ The frozen MVP remains the source of truth. This log records implementation choi
 2026-10-14 — T19 source validation (activation pending founders) — SEC current filings split into 8-K and a new 6-K source (21 sources); CFTC moved to /RSS/RSSGP/rssgp.xml; Treasury has no press-release feed (null, GovDelivery only); NOAA stays disabled (robots.txt disallows all); TLS verifies with certifi — Aaryan; evidence in docs/T19_SOURCE_VALIDATION.md. 14 feeds validated; ECB, Bank of England and company newsroom terms need a founder read before activation.
 2026-10-14 — Real-data ingest hardening (pending founder confirmation) — From a 411-article real feed run: SEC industries get no name alias (graph-only; 'Aircraft' tagged FAA directives); override promotion needs a live Company/Security/Facility/Product mentioned ≥ 3 times in the body; bodies under 300 chars are refused; body near-duplicates also need headline Jaccard ≥ 0.5; tier-1 articles without a usable body get a title+snippet embedding; SEC bodies follow the filing index; Federal Register bodies use its full-text path; ECB source switched to press releases — Aaryan; each rule is backed by an observed failure in docs/T21_BODY_STAGE.md and docs/T19_SOURCE_VALIDATION.md.
 2026-10-14 — Fetch safety and audit sampling (pending founder confirmation) — The body fetcher follows at most 3 redirects itself and refuses non-public destinations on every hop (SSRF); tier-3 articles in the 5% audit sample are audited with their original tier even when a primary source routes them to override; SEC current-filing feeds request count=100; committed env templates may hold no secret values (tested) — Aaryan; search results are untrusted input, and the §17 audit needs samples from the sources that will actually be active.
-=======
-=======
-=======
-=======
-=======
-=======
-=======
-=======
 2026-10-13 — T15 agent-drafted batches (pending founder confirmation) — Batches drafted in a Claude Code session are labelled `drafted_by: llm:claude-opus-5-5` with a session-generated `usage_request_id` that has no `usage_records` row, because the drafting ran outside the product's metered OpenAI path. Every excerpt is fetched from its source URL and verified verbatim before the batch is written — Aaryan; keeps model provenance truthful without inventing metering. Human acceptance (Aaryan) and Aaditya's PR review remain required for every edge.
 
 
+2026-10-14 — T15 batch 2 drafting model — Batch 2 is labelled `drafted_by: llm:claude-sonnet-5-5` (the model that drafted it); batch 1 keeps `llm:claude-opus-5-5`; usage_request_ids are session-generated with no usage_records row (see the 2026-10-13 T15 entry) — Aaryan; keeps provenance truthful per batch.
 
