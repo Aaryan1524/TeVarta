@@ -17,7 +17,7 @@ import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -50,6 +50,21 @@ PROMOTING_TYPES = ("Company", "Security", "Facility", "Product")
 # ...and only when the body is about it: attendee lists and passing references name a
 # company once or twice, while a company's own release or filing names it repeatedly.
 PROMOTION_MIN_MENTIONS = 3
+# Body text is long and capitalized common words abound ("Senior Vice President", "The
+# Nasdaq Stock Market", "People"), so body tags need more than one hit. Real run, 350 body
+# links: 65% had a single mention and nearly all of those were spurious. Identifier syntax
+# ($AAPL, CIK ...) is explicit and always counts.
+BODY_TAG_MIN_MENTIONS = 2
+BODY_TAG_STOPLIST = Path(__file__).resolve().parents[2] / "config" / "body_tag_stoplist.yaml"
+
+
+def load_body_stoplist(path: Path = BODY_TAG_STOPLIST) -> frozenset[str]:
+    import yaml
+
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return frozenset(str(key) for key in payload.get("aliases", []))
+
+
 # A body near-duplicate is a copy of the same story only if the headlines agree too:
 # blocked or templated pages are near-identical across unrelated documents.
 TITLE_MATCH_MIN = 0.5
@@ -419,6 +434,7 @@ class BodyStage:
         self.connection, self.fetcher, self.store = connection, fetcher, store
         self.embedder, self.now = embedder, now
         self.tagger = MetadataTagger(PostgresAliasIndex(connection))
+        self.stoplist = load_body_stoplist()
 
     def process(self, article_id: UUID | str, *, mode: str = "default",
                 sampled: bool = False) -> BodyResult:
@@ -562,8 +578,22 @@ class BodyStage:
 
     def _tag_body(self, article_id: UUID | str, text: str,
                   domain: str) -> tuple[tuple[Any, ...], int]:
-        """Body tags may add entities (§7.2). Returns every entity found and the count new."""
+        """Body tags may add entities (§7.2).
+
+        Returns (entities for the §17 audit, count of tags added). Article tags are filtered
+        (two mentions or an identifier, no stoplisted names); the audit measures what the
+        metadata filter missed, so it sees every non-stoplisted finding, even a single mention.
+        """
         tagging = self.tagger.tag(text[:MAX_TAGGED_CHARS], None, domain)
+        audit_findings = tuple(
+            entity for entity in tagging.entities if not set(entity.keys) <= self.stoplist)
+        kept = tuple(
+            entity for entity in tagging.entities
+            if entity.identifier
+            or (entity.mentions >= BODY_TAG_MIN_MENTIONS
+                and not set(entity.keys) <= self.stoplist)
+        )
+        tagging = replace(tagging, entities=kept)
         added = 0
         with self.connection.transaction():
             for entity in tagging.entities:
@@ -581,7 +611,7 @@ class BodyStage:
                      json.dumps({"candidates": list(ambiguity.candidates), "stage": "body"}),
                      article_id),
                 )
-        return tagging.entities, added
+        return audit_findings, added
 
     def _embed(self, article_id: UUID | str, text: str, scope: str) -> str:
         if self.embedder is None:

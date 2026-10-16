@@ -77,51 +77,77 @@ Two rules the app enforces (*tested*):
 - With `TEVARTA_ENV=production`, no service URL or bucket name may contain `localhost`,
   `dev` or `development`, and `TEVARTA_CREDENTIAL_SET` must be `production`.
 - If `TEVARTA_APPLE_CLIENT_ID`, `TEVARTA_JWT_SIGNING_KEY` or `TEVARTA_REFRESH_TTL_SECONDS`
-  is missing, the API silently falls back to **fixture mode**. Verify auth is live (step 5).
+  is missing, the API silently falls back to **fixture mode**. Verify auth is live (step 7). The worker does not need these three variables.
 
-## 4. Start it
+## 4. Start the data stores (first deploy)
 
 ```sh
 cd /opt/tevarta/deploy
-export TEVARTA_HOSTNAME=api.tevarta.com        # DNS A record -> the instance's public IP
+export TEVARTA_HOSTNAME=:80    # only matters once the API is started (step 7)
 docker compose -f compose.production.yaml build
-docker compose -f compose.production.yaml up -d
-docker compose -f compose.production.yaml ps     # everything healthy
+docker compose -f compose.production.yaml up -d postgres neo4j redis migrate
+docker compose -f compose.production.yaml ps -a    # postgres, neo4j, redis healthy; migrate Exited (0)
 ```
 
-Point the DNS record first; Caddy then obtains the certificate by itself. To smoke-test
-before DNS exists, use `TEVARTA_HOSTNAME=:80` (HTTP only, so the API will redirect: expected).
+Do **not** start the worker yet: with an empty catalog every article would land in tier 3.
 
-## 5. Verify (*tested locally on arm64 with the same files*)
+## 5. Load the data (first deploy only, in this order) (*tested in the local stack*)
 
 ```sh
-curl -s https://api.tevarta.com/health                                 # {"status":"ok"} + HSTS header
-curl -s -o /dev/null -w "%{http_code}\n" https://api.tevarta.com/v1/feed                   # 401
-curl -s -H 'Authorization: Bearer fixture-access-token' -w "%{http_code}\n" https://api.tevarta.com/v1/feed   # 401, NOT 200
+cd /opt/tevarta/deploy
+mkdir -p ~/data
+# 5a. SEC catalog (your contact goes in the User-Agent; SEC rejects anonymous clients):
+curl -A "TeVarta/1.0 (YOUR_OPS_EMAIL)" -o ~/data/company_tickers.json https://www.sec.gov/files/company_tickers.json
+run() { docker compose -f compose.production.yaml run --rm --no-deps -v ~/data:/data:ro migrate sh -c "$1"; }
+run 'python scripts/import_sec_catalog.py /data/company_tickers.json --database-url "$TEVARTA_POSTGRES_URL" > /tmp/r.json && python -c "import json; d=json.load(open(\"/tmp/r.json\")); print({k: v for k, v in d.items() if k != \"entity_ids\"})"'
+# 5b. Curated edges. ONLY after Aaditya's evidence review (see below):
+run 'python scripts/curate_edges.py validate --database-url "$TEVARTA_POSTGRES_URL" | grep -E "edges|review_records"'
+run 'python scripts/curate_edges.py load --database-url "$TEVARTA_POSTGRES_URL" --neo4j-url bolt://neo4j:7687 | grep -c "\"status\": \"\(created\|replayed\)\""'    # prints 25
+# 5c. Pre-warm the 50 likely seeds (loads reviewed aliases, promotes them live):
+run 'python scripts/prewarm.py --database-url "$TEVARTA_POSTGRES_URL" --neo4j-url bolt://neo4j:7687 --no-search 2>/dev/null > /tmp/p.json; python -c "import json; d=json.load(open(\"/tmp/p.json\")); print({k: d[k] for k in (\"entities\", \"live\", \"with_dependency_edges\")}); print(\"gaps:\", len(d[\"gaps\"]))"'
+```
+
+The `$TEVARTA_...` values are read **inside** the container from your env file; the single
+quotes keep your shell from expanding them. If Aaditya hasn't reviewed the edges yet, skip
+5b and run it later: pre-warm and feeds work without edges, and loading edges afterwards
+re-queues the prepared graph views by itself.
+
+## 6. Start the pipeline (feeds, tiering, bodies, embeddings)
+
+```sh
+docker compose -f compose.production.yaml up -d worker beat
+docker compose -f compose.production.yaml logs -f --tail 20 worker     # Ctrl-C to leave
+```
+
+No API, domain or certificate is needed to collect two weeks of feed data, and nothing is
+exposed to the internet except SSH. After about 10 minutes check progress:
+
+```sh
+docker compose -f compose.production.yaml exec -T postgres psql -U tevarta -d tevarta -tAc \
+  "select tier, count(*) from articles group by tier order by tier"
+docker compose -f compose.production.yaml run --rm --no-deps migrate \
+  python scripts/ingest_report.py --database-url "$(grep ^TEVARTA_POSTGRES_URL /etc/tevarta/tevarta.env | cut -d= -f2-)"
+```
+
+Expect all three tiers once the catalog is loaded (tier 1 = live entities and their
+upstream countries). A healthy first hour is hundreds of articles, **zero** worker errors.
+
+## 7. Start the API (later, when the iOS app needs it) (*tested locally on arm64*)
+
+Set the Apple and JWT variables in the env file first (step 3), then:
+
+```sh
+export TEVARTA_HOSTNAME=api.tevarta.com        # DNS A record -> the instance's public IP
+docker compose -f compose.production.yaml up -d api caddy
+curl -s https://api.tevarta.com/health                                                       # {"status":"ok"}
+curl -s -o /dev/null -w "%{http_code}\n" https://api.tevarta.com/v1/feed                      # 401
+curl -s -H 'Authorization: Bearer fixture-access-token' -w "%{http_code}\n" https://api.tevarta.com/v1/feed  # 401, NOT 200
 ```
 
 The last must be 401. A 200 means auth is not configured and the API is serving fixtures.
+Point the DNS record first; Caddy obtains the certificate by itself.
 
-## 6. Load the data (first deploy only, in this order)
-
-```sh
-cd /opt/tevarta/deploy
-RUN="docker compose -f compose.production.yaml run --rm --no-deps -v /tmp:/tmp migrate"
-# 6a. SEC catalog (needs your contact in the User-Agent):
-curl -A "TeVarta/1.0 ($OPS_EMAIL)" -o /tmp/company_tickers.json https://www.sec.gov/files/company_tickers.json
-$RUN python scripts/import_sec_catalog.py /tmp/company_tickers.json --database-url "$TEVARTA_POSTGRES_URL"
-# 6b. Curated edges (only after Aaditya's evidence review is merged):
-$RUN python scripts/curate_edges.py validate --database-url "$TEVARTA_POSTGRES_URL"
-$RUN python scripts/curate_edges.py load --database-url "$TEVARTA_POSTGRES_URL" --neo4j-url bolt://neo4j:7687
-# 6c. Pre-warm the 50 likely seeds:
-$RUN python scripts/prewarm.py --database-url "$TEVARTA_POSTGRES_URL" --neo4j-url bolt://neo4j:7687 --no-search
-```
-
-The `--database-url` values are the DSN from your env file (Compose service names resolve
-inside the stack). **Do this before turning on sources**: with an empty catalog every
-article is tier 3. (That is what the local smoke run showed: 400 articles, all tier 3.)
-
-## 7. Backups (do this before inviting anyone: MVP §20.1)
+## 8. Backups (do this before inviting anyone: MVP §20.1)
 
 ```sh
 sudo install -d -m 700 /var/backups/tevarta
@@ -140,7 +166,7 @@ Edition can only dump offline), so the 03:00 schedule matters.
 restores into a throwaway database, prints row counts next to the live database, and
 drops it. Keep `age.key` offline.
 
-## 8. Operating notes
+## 9. Operating notes
 
 - **Idle reclaim.** Oracle may reclaim an Always Free instance idle for 7 days (CPU,
   network *and* memory all under 20%). Run `./check-idle.sh` from cron; it warns below 25%
