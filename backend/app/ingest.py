@@ -193,6 +193,8 @@ class TaggedEntity:
     mentions: int
     salience: float
     in_title: bool
+    keys: tuple[str, ...] = ()  # alias keys that matched, for body-tag filtering
+    identifier: bool = False  # matched through $TICKER, CIK, exchange-qualified symbol
 
 
 @dataclass(frozen=True)
@@ -283,6 +285,8 @@ class MetadataTagger:
                 salience=TITLE_SALIENCE if any(m.field == "title" for m in found)
                 else SNIPPET_SALIENCE,
                 in_title=any(m.field == "title" for m in found),
+                keys=tuple(sorted({m.key for m in found})),
+                identifier=any(m.identifier for m in found),
             )
             for entity_id, found in sorted(resolved.items())
         )

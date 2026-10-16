@@ -1,0 +1,24 @@
+# Aliases that must not tag an article from its BODY text (titles are unaffected).
+# Each is a common word or boilerplate that equals a catalog company name: an exchange named
+# in every SEC cover page, or a capitalized job title or noun. Keys are normalized aliases
+# (lowercase, no spaces). Found by running the pipeline on real feeds (docs/T21_BODY_STAGE.md);
+# extend it from `scripts/ingest_report.py` and resolution_misses, reviewed in PRs.
+aliases:
+  - nasdaq
+  - senior
+  - eastern
+  - southern
+  - western
+  - northern
+  - people
+  - paid
+  - joint
+  - strategy
+  - box
+  - news
+  - target
+  - general
+  - first
+  - american
+  - national
+  - united

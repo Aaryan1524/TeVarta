@@ -190,11 +190,13 @@ def test_a_primary_source_without_live_entities_keeps_its_tier(dsn, tmp_path):
 def test_the_audit_records_body_findings_without_promoting(dsn, tmp_path):
     sampled = ingest(dsn, "A regional update")
     assert sampled.tier == 3
-    connection, stage = body_stage(dsn, tmp_path, "Paragraph six notes SanDisk plants in Taiwan.")
+    connection, stage = body_stage(
+        dsn, tmp_path, "Paragraph six notes SanDisk plants in Taiwan. SanDisk will rebuild.")
     with connection:
         result = stage.process(sampled.article_id, mode="audit")
     assert (result.audited, result.promoted, result.tier, result.embedding) == (
         True, False, 3, "none")
+    # The audit sees the single Taiwan mention that article tagging would drop (§17 recall).
     assert one(dsn, """SELECT tier_assigned, entities_found_in_body FROM recall_audit
                        WHERE article_id = %s""", sampled.article_id) == (
         3, ["ent_t22_sandisk", "ent_t22_taiwan"])

@@ -107,3 +107,18 @@ A search result is attacker-influenced, so the fetcher never trusts a URL:
 Every activatable source is `tier_value ≥ 0.9`, so tier 3 always routes to `override`
 and the §17 tier-3 audit would never sample. A tier-3 article in the 5% sample now has
 its original tier audited (`recall_audit`) before any override promotion.
+
+## Body-tag noise (found in the first real deploy test, 2026-10-16)
+
+With the catalog loaded, 350 body-tag links on 400 articles were mostly noise: 65% had a
+single mention, and the top names were Nasdaq Inc. (every SEC cover page names the
+exchange), Senior plc ("Senior Vice President"), Eastern Co, Box Inc, People Inc.
+Spurious tags would corrupt the clustering entity-overlap (§8 `jacc`) and `demand_log`.
+
+Rules now (`bodies.py`, `config/body_tag_stoplist.yaml`):
+- A body tag needs **two mentions**, or identifier syntax (`$AAPL`, CIK, exchange-qualified).
+- Stoplisted names never tag from a body (titles are unaffected).
+- The §17 audit still sees every non-stoplisted finding, even a single mention, because it
+  measures what the metadata filter missed.
+
+Extend the stoplist from `scripts/ingest_report.py` and `resolution_misses`, in PRs.
