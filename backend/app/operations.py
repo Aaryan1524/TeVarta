@@ -168,6 +168,21 @@ class HSTSMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class HealthExemptHTTPSRedirect(HTTPSRedirectMiddleware):
+    """HTTPS redirect that leaves /health alone.
+
+    Container and load-balancer probes call the process directly over plain HTTP from
+    an address no proxy vouches for, so redirecting them to https makes a healthy API
+    look dead. /health returns a constant and exposes nothing.
+    """
+
+    async def __call__(self, scope, receive, send) -> None:  # type: ignore[no-untyped-def]
+        if scope["type"] == "http" and scope.get("path") == "/health":
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
 def install_transport_security(
     app: Starlette, settings: EnvironmentSettings, environ: Mapping[str, str] | None = None
 ) -> None:
@@ -191,7 +206,7 @@ def install_transport_security(
         raise EnvironmentConfigurationError(
             "TEVARTA_TRUSTED_PROXIES must list proxy addresses; '*' lets clients spoof HTTPS"
         )
-    app.add_middleware(HTTPSRedirectMiddleware)
+    app.add_middleware(HealthExemptHTTPSRedirect)
     app.add_middleware(HSTSMiddleware)
     # Added last, so outermost: the scheme is corrected before the redirect check.
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted)

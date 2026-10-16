@@ -1,0 +1,6 @@
+# TLS is terminated here. With a real hostname Caddy obtains and renews certificates;
+# set TEVARTA_HOSTNAME=:80 for an IP-only smoke test before DNS exists.
+{$TEVARTA_HOSTNAME} {
+	encode gzip
+	reverse_proxy api:8000
+}

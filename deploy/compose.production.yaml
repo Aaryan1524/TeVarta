@@ -1,0 +1,136 @@
+# TeVarta on one Linux host: API, Celery worker, Celery beat, Redis, Postgres (pgvector),
+# Neo4j Community, and Caddy for HTTPS. Works on amd64 and arm64 (Oracle Ampere).
+# Secrets come from an env file outside the repo: see deploy/README.md.
+name: tevarta
+
+x-app: &app
+  image: ${TEVARTA_IMAGE:-tevarta-app:local}
+  restart: unless-stopped
+  env_file: ${TEVARTA_ENV_FILE:-/etc/tevarta/tevarta.env}
+  networks: [private]
+  volumes: [bodies:/var/lib/tevarta/bodies]
+
+services:
+  postgres:
+    # Same image CI tests against (pgvector 0.8.6 on Postgres 16).
+    image: pgvector/pgvector:0.8.6-pg16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tevarta
+      POSTGRES_DB: tevarta
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U tevarta -d tevarta']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  neo4j:
+    image: neo4j:5.26-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH_FILE: /run/secrets/neo4j_auth
+      # Sized for a 12 GB host shared with Postgres and the workers.
+      NEO4J_server_memory_heap_initial__size: 1G
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 1G
+    secrets: [neo4j_auth]
+    volumes: [neo4j-data:/data]
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, 'cypher-shell -u neo4j -p "$$(cut -d/ -f2 /run/secrets/neo4j_auth)" "RETURN 1" >/dev/null']
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --save, '', --appendonly, 'no']  # broker only; durable state is Postgres
+    networks: [private]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  migrate:
+    <<: *app
+    build:   # the one place the shared image is built; every app service reuses it
+      context: ..
+      dockerfile: Dockerfile
+    restart: 'no'
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  api:
+    <<: *app
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      neo4j: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      private:
+      edge:
+
+  worker:
+    <<: *app
+    command: [celery, -A, app.worker:celery_app, worker, --loglevel=INFO, --concurrency=2]
+    networks: [private, egress]  # fetches feeds and bodies; calls OpenAI and Brave
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      neo4j: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  beat:
+    <<: *app
+    command: [celery, -A, app.worker:celery_app, beat, --loglevel=INFO, --schedule=/tmp/celerybeat-schedule]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      TEVARTA_HOSTNAME: ${TEVARTA_HOSTNAME:?Set TEVARTA_HOSTNAME (e.g. api.example.com, or :80 to smoke test)}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      api: {condition: service_healthy}
+    networks:
+      edge:
+        ipv4_address: 172.31.40.10   # the only proxy the API trusts for X-Forwarded-*
+
+networks:
+  private:
+    internal: true   # Postgres, Neo4j and Redis have no route to or from the internet
+  egress:            # outbound-only: the worker's route to feeds and providers
+  edge:
+    ipam:
+      config: [{subnet: 172.31.40.0/24}]
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  bodies:
+  caddy-data:
+
+secrets:
+  postgres_password:
+    file: ${TEVARTA_SECRETS_DIR:-/etc/tevarta/secrets}/postgres_password
+  neo4j_auth:
+    file: ${TEVARTA_SECRETS_DIR:-/etc/tevarta/secrets}/neo4j_auth
