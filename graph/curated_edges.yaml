@@ -35,4 +35,484 @@ entities:
   aliases:
   - Samsung Electronics
   - Samsung Electronics Co Ltd
-edges: []
+- entity_id: ent_cur_panasonic
+  canonical_name: Panasonic Holdings Corporation
+  type: Company
+  aliases:
+  - Panasonic
+  - Panasonic Holdings
+- entity_id: ent_cur_catl
+  canonical_name: Contemporary Amperex Technology Co. Limited
+  type: Company
+  aliases:
+  - CATL
+  - Contemporary Amperex Technology
+- entity_id: ent_cur_openai
+  canonical_name: OpenAI
+  type: Company
+  aliases:
+  - OpenAI
+edges:
+- source: AAPL
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 1.0
+  rationale: Apple produces advanced silicon at TSMC and is the largest customer of TSMC's Arizona fab;
+    TSMC names Apple as a customer.
+  evidence:
+  - url: https://www.apple.com/newsroom/2025/02/apple-will-spend-more-than-500-billion-usd-in-the-us-over-the-next-four-years/
+    source_type: company_ir
+    publisher_group: apple
+    locator: Apple Newsroom, February 2025
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 6-K filed 2025-03-03
+  valid_from: 2025-02-24
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-01
+  drafted_by: llm:claude-opus-5-5
+- source: NVDA
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 1.0
+  rationale: NVIDIA uses TSMC as a foundry to produce its semiconductor wafers; TSMC names NVIDIA as a
+    customer.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+    source_type: sec_filing
+    publisher_group: nvidia
+    locator: Form 10-K, fiscal year ended 2026-01-25
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 6-K filed 2025-03-03
+  valid_from: 2025-03-03
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-02
+  drafted_by: llm:claude-opus-5-5
+- source: AMD
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 1.0
+  rationale: AMD uses TSMC to produce wafers for its HPC, FPGA and adaptive SoC products; TSMC names AMD
+    as a customer.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/2488/000000248826000018/amd-20251227.htm
+    source_type: sec_filing
+    publisher_group: amd
+    locator: Form 10-K, fiscal year ended 2025-12-27; Third-Party Wafer Foundry Facilities
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 6-K filed 2025-03-03
+  valid_from: 2025-03-03
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-03
+  drafted_by: llm:claude-opus-5-5
+- source: QCOM
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 1.0
+  rationale: TSMC is a primary foundry supplier for Qualcomm's integrated circuits; TSMC names Qualcomm
+    as a customer.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/804328/000080432825000085/qcom-20250928.htm
+    source_type: sec_filing
+    publisher_group: qualcomm
+    locator: Form 10-K, fiscal year ended 2025-09-28
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 6-K filed 2025-03-03
+  valid_from: 2025-03-03
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-04
+  drafted_by: llm:claude-opus-5-5
+- source: AVGO
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 1.0
+  rationale: Broadcom outsources the majority of its front-end wafer manufacturing to foundries including
+    TSMC; TSMC names Broadcom as a customer.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1730168/000173016825000121/avgo-20251102.htm
+    source_type: sec_filing
+    publisher_group: broadcom
+    locator: Form 10-K, fiscal year ended 2025-11-02
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000104617925000024/tsmcexpandinvestmentintheu.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 6-K filed 2025-03-03
+  valid_from: 2025-03-03
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-05
+  drafted_by: llm:claude-opus-5-5
+- source: ASML
+  relation: SUPPLIES
+  target: TSM
+  weight: 0.85
+  directness: 0.6
+  rationale: ASML received TSMC's supplier award, which implies ASML supplies TSMC; the filing does not
+    state what it supplies.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+    source_type: sec_filing
+    publisher_group: asml
+    locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-06
+  drafted_by: llm:claude-opus-5-5
+- source: Carl Zeiss SMT
+  relation: SOLE_SOURCE_FOR
+  target: ASML
+  weight: 0.95
+  directness: 1.0
+  rationale: Carl Zeiss SMT is ASML's sole supplier of lenses, mirrors and other critical optics, and
+    limits how many lithography systems ASML can build.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+    source_type: sec_filing
+    publisher_group: asml
+    locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-07
+  drafted_by: llm:claude-opus-5-5
+- source: ASML
+  relation: EXPOSED_TO
+  target: Netherlands
+  weight: 0.8
+  directness: 1.0
+  rationale: ASML's manufacturing, subassembly and system testing take place largely in Veldhoven, Eindhoven
+    and Oirschot in the Netherlands.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+    source_type: sec_filing
+    publisher_group: asml
+    locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-08
+  drafted_by: llm:claude-opus-5-5
+- source: ASML
+  relation: EXPOSED_TO
+  target: Taiwan
+  weight: 0.8
+  directness: 1.0
+  rationale: ASML lists manufacturing facilities in Linkou and Tainan, Taiwan. Evidence-backed per SC2;
+    reviewer decides whether to include.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm
+    source_type: sec_filing
+    publisher_group: asml
+    locator: Form 20-F / Annual Report, fiscal year ended 2025-12-31
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-09
+  drafted_by: llm:claude-opus-5-5
+- source: TSM
+  relation: EXPOSED_TO
+  target: Taiwan
+  weight: 0.8
+  directness: 1.0
+  rationale: TSMC's operations are concentrated in Taiwan; earthquakes in Taiwan damaged its inventories,
+    plants and equipment in 2024 and 2025.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/tsm-20251231.htm
+    source_type: sec_filing
+    publisher_group: tsmc
+    locator: Form 20-F, fiscal year ended 2025-12-31; risk factors, natural disasters
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-10
+  drafted_by: llm:claude-opus-5-5
+- source: AAPL
+  relation: EXPOSED_TO
+  target: China
+  weight: 0.8
+  directness: 1.0
+  rationale: Substantially all Apple hardware is manufactured by outsourcing partners located primarily
+    in China mainland and other Asian countries.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm
+    source_type: sec_filing
+    publisher_group: apple
+    locator: Form 10-K, fiscal year ended 2025-09-27; Note 13 segment and geographic data
+  valid_from: 2025-09-27
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-11
+  drafted_by: llm:claude-opus-5-5
+- source: AAPL
+  relation: EXPOSED_TO
+  target: Taiwan
+  weight: 0.8
+  directness: 1.0
+  rationale: Apple's outsourcing manufacturing partners are located primarily in Asian countries including
+    Taiwan.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm
+    source_type: sec_filing
+    publisher_group: apple
+    locator: Form 10-K, fiscal year ended 2025-09-27; Note 13 segment and geographic data
+  valid_from: 2025-09-27
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-12
+  drafted_by: llm:claude-opus-5-5
+- source: NVDA
+  relation: DEPENDS_ON
+  target: MU
+  weight: 0.9
+  directness: 1.0
+  rationale: NVIDIA purchases memory from Micron, among others.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+    source_type: sec_filing
+    publisher_group: nvidia
+    locator: Form 10-K, fiscal year ended 2026-01-25
+  valid_from: 2026-01-25
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-13
+  drafted_by: llm:claude-opus-5-5
+- source: NVDA
+  relation: DEPENDS_ON
+  target: SKHY
+  weight: 0.9
+  directness: 1.0
+  rationale: NVIDIA purchases memory from SK Hynix, among others.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+    source_type: sec_filing
+    publisher_group: nvidia
+    locator: Form 10-K, fiscal year ended 2026-01-25
+  valid_from: 2026-01-25
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-14
+  drafted_by: llm:claude-opus-5-5
+- source: NVDA
+  relation: DEPENDS_ON
+  target: Samsung Electronics
+  weight: 0.9
+  directness: 1.0
+  rationale: NVIDIA uses Samsung as a foundry for semiconductor wafers and purchases memory from Samsung.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm
+    source_type: sec_filing
+    publisher_group: nvidia
+    locator: Form 10-K, fiscal year ended 2026-01-25
+  valid_from: 2026-01-25
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-15
+  drafted_by: llm:claude-opus-5-5
+- source: MU
+  relation: EXPOSED_TO
+  target: Taiwan
+  weight: 0.8
+  directness: 1.0
+  rationale: A majority of Micron's DRAM production output came from its fabrication facilities in Taiwan.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/723125/000072312526000023/mu-20260903.htm
+    source_type: sec_filing
+    publisher_group: micron
+    locator: Form 10-K, fiscal year ended 2026-09-03; risk factors, Taiwan
+  valid_from: 2026-09-03
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-13
+  proposal_id: t15-batch-01-sc2-foundry-16
+  drafted_by: llm:claude-opus-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: TSM
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists TSMC among its most significant customers, i.e. it supplies TSMC's fabs.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-01
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: MU
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists Micron among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-02
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: SKHY
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists SK hynix among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-03
+  drafted_by: llm:claude-sonnet-5-5
+- source: LRCX
+  relation: SUPPLIES
+  target: Samsung Electronics
+  weight: 0.85
+  directness: 1.0
+  rationale: Lam Research lists Samsung Electronics among its most significant customers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/707549/000070754926000037/lrcx-20260628.htm
+    source_type: sec_filing
+    publisher_group: lam_research
+    locator: Form 10-K, fiscal year ended 2026-06-28; risk factors, customer concentration
+  valid_from: 2026-06-28
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-04
+  drafted_by: llm:claude-sonnet-5-5
+- source: KLAC
+  relation: SUPPLIES
+  target: TSM
+  weight: 0.85
+  directness: 1.0
+  rationale: TSMC accounted for more than 10% of KLA's revenue in each of the last three fiscal years,
+    primarily process-control equipment.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/319201/000031920126000027/klac-20260630.htm
+    source_type: sec_filing
+    publisher_group: kla
+    locator: Form 10-K, fiscal year ended 2026-06-30; Business, customers over 10% of revenue
+  valid_from: 2026-06-30
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-05
+  drafted_by: llm:claude-sonnet-5-5
+- source: TSLA
+  relation: DEPENDS_ON
+  target: Panasonic
+  weight: 0.9
+  directness: 1.0
+  rationale: Tesla relies on Panasonic for lithium-ion battery cells and has qualified only a very limited
+    number of suppliers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm
+    source_type: sec_filing
+    publisher_group: tesla
+    locator: Form 10-K, fiscal year ended 2025-12-31; risk factors, battery cell supply
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-06
+  drafted_by: llm:claude-sonnet-5-5
+- source: TSLA
+  relation: DEPENDS_ON
+  target: CATL
+  weight: 0.9
+  directness: 1.0
+  rationale: Tesla relies on CATL for lithium-ion battery cells and has qualified only a very limited
+    number of suppliers.
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm
+    source_type: sec_filing
+    publisher_group: tesla
+    locator: Form 10-K, fiscal year ended 2025-12-31; risk factors, battery cell supply
+  valid_from: 2025-12-31
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-07
+  drafted_by: llm:claude-sonnet-5-5
+- source: INTC
+  relation: DEPENDS_ON
+  target: TSM
+  weight: 0.9
+  directness: 0.6
+  rationale: 'Conditional: if Intel cannot secure a major external foundry customer for 14A it expects
+    to shift manufacturing to third-party foundries, particularly TSMC. Reviewer: consider a lower weight
+    than the default.'
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/50863/000005086326000011/intc-20251227.htm
+    source_type: sec_filing
+    publisher_group: intel
+    locator: Form 10-K, fiscal year ended 2025-12-27; Business, strategy
+  valid_from: 2025-12-27
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-08
+  drafted_by: llm:claude-sonnet-5-5
+- source: MSFT
+  relation: DEPENDS_ON
+  target: OpenAI
+  weight: 0.9
+  directness: 0.6
+  rationale: 'Microsoft has a long-term strategic partnership with OpenAI (since 2019); the filing does
+    not state a supply dependency, so this is inferred. Reviewer: consider a lower weight.'
+  evidence:
+  - url: https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm
+    source_type: sec_filing
+    publisher_group: microsoft
+    locator: Form 10-K, fiscal year ended 2026-06-30; strategic partnership
+  valid_from: 2026-06-30
+  curated_by: aaryan
+  curated_at: 2026-10-14
+  review_by: 2027-04-14
+  proposal_id: t15-batch-02-equipment-batteries-09
+  drafted_by: llm:claude-sonnet-5-5

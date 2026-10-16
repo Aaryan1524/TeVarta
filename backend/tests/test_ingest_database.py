@@ -138,7 +138,7 @@ def test_source_sync_mirrors_the_registry_idempotently(conn):
     assert sync_sources(conn, sources) == len(sources)
     assert conn.execute(
         "SELECT publisher_group, tier_value, active FROM sources WHERE id = 'sec_current_filings'"
-    ).fetchone() == ("us_sec", 1, False)
+    ).fetchone() == ("us_sec", 1, True)
 
 
 def test_concurrent_workers_insert_one_article(migrated_dsn):

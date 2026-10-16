@@ -118,19 +118,30 @@ def test_declared_user_agent_names_the_client_and_contact():
     assert agent == "TeVarta/1.0 (ops@tevarta.com)"
 
 
-def test_poll_task_without_active_sources_needs_no_contact(monkeypatch):
+def test_poll_task_without_active_sources_needs_no_contact(monkeypatch, tmp_path):
     from app.discovery import poll_sources
 
+    config = tmp_path / "sources.yaml"
+    config.write_text("sources: []\n")
+    monkeypatch.setenv("TEVARTA_SOURCES_CONFIG", str(config))
     monkeypatch.delenv("TEVARTA_HTTP_CONTACT", raising=False)
 
     assert poll_sources.run() == 0
 
 
-def test_source_registry_keeps_every_source_disabled_until_t19_rights_review():
+# Founder-approved 2026-10-14 after live validation (docs/T19_SOURCE_VALIDATION.md).
+APPROVED_SOURCES = {"sec_current_filings", "sec_current_6k", "federal_register_documents",
+                    "federal_reserve_press", "cftc_press_releases", "doj_press_releases",
+                    "eia_today_in_energy", "usgs_earthquakes"}
+
+
+def test_only_founder_approved_sources_are_active():
     sources = load_sources()
     assert len(sources) == 21
-    assert all(not item.active for item in sources)
+    assert {item.id for item in sources if item.active} == APPROVED_SOURCES
     assert all(item.poll_interval_s == 300 for item in sources)
+    # Terms unread, no feed, robots-disallowed or unlicensed: never active by accident.
+    assert not any(item.active for item in sources if not item.feed_url)
 
 
 def test_source_registry_rejects_non_mapping_entries(tmp_path):

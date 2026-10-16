@@ -22,7 +22,7 @@ proposals:
       facility
     excerpt_verified: true
   draft_sha: 2054857f4f3cb24196aa9e39ec2622ef8f51929277885203fb13c0e8ce4e68c2
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: AAPL
@@ -55,7 +55,7 @@ proposals:
       and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers.
     excerpt_verified: true
   draft_sha: a913f4c82a596b970de9a9ba4d55896638ae74d8ef21ad36e0550138e59b961a
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: NVDA
@@ -88,7 +88,7 @@ proposals:
       wafers for our HPC, FPGA and adaptive SoC products
     excerpt_verified: true
   draft_sha: e4a3d18b061dbd836a2ecd01e415f4080b065ac043b660b38125959d4c1e1821
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: AMD
@@ -122,7 +122,7 @@ proposals:
       Foundries.
     excerpt_verified: true
   draft_sha: b277b550551d5ad91fa4358dfc234af9ff2a6296c17ad80158b637cb05fac19f
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: QCOM
@@ -155,7 +155,7 @@ proposals:
       including Taiwan Semiconductor Manufacturing Company Limited (“TSMC”).
     excerpt_verified: true
   draft_sha: 0aa6b5ccb247c04e08c3dde365e134a84211d44580a8e65c0842c67d45797c3f
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: AVGO
@@ -188,7 +188,7 @@ proposals:
       Award
     excerpt_verified: true
   draft_sha: 09b20d660dd15b0544df7402e27b927f381c20548aac48d949f3038006db9a48
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: ASML
@@ -217,7 +217,7 @@ proposals:
       critical optical components
     excerpt_verified: true
   draft_sha: adbcf84c307665ab55001839c6d0525ef06aa160dc0dd6ba76aafcce5e3dfac8
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: Carl Zeiss SMT
@@ -247,7 +247,7 @@ proposals:
       (Germany), Wilton, San Diego (US), Pyeongtaek (South Korea) and Linkou and Tainan (Taiwan).
     excerpt_verified: true
   draft_sha: d6643596f0fe6e0d844492b59281a8418209780b511130e776a5b71532b1f2b6
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: ASML
@@ -277,7 +277,7 @@ proposals:
       (Germany), Wilton, San Diego (US), Pyeongtaek (South Korea) and Linkou and Tainan (Taiwan).
     excerpt_verified: true
   draft_sha: cbadfe83fae77d9ca74ce9a28229b648a6617fd30d54de826134b97a2893c927
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: ASML
@@ -306,7 +306,7 @@ proposals:
       and equipment.
     excerpt_verified: true
   draft_sha: 832de293aa4c222b87c3bc7cd82ca471b83dbcd56dbe77f00328f6b2993f454f
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: TSM
@@ -335,7 +335,7 @@ proposals:
       that are located primarily in China mainland, India, Japan, South Korea, Taiwan and Vietnam.
     excerpt_verified: true
   draft_sha: 60c94d50bd213a641df468028af53570fd168c2974fd1340c8aca211b4a5e529
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: AAPL
@@ -364,7 +364,7 @@ proposals:
       that are located primarily in China mainland, India, Japan, South Korea, Taiwan and Vietnam.
     excerpt_verified: true
   draft_sha: 1dab14f758a98050e0da6b139aac9cf511d899b82542115713c23f3a6bd8f666
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: AAPL
@@ -391,7 +391,7 @@ proposals:
     excerpt: We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.
     excerpt_verified: true
   draft_sha: 0e3b65289694660ec6e1f7743298351332963cb6439d725b245c107987ec29e4
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: NVDA
@@ -417,7 +417,7 @@ proposals:
     excerpt: We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.
     excerpt_verified: true
   draft_sha: 43d6984a475784690d90adbbd650a64fd548c4eec8db6ca8e8ee083f5484823c
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: NVDA
@@ -444,7 +444,7 @@ proposals:
       and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers.
     excerpt_verified: true
   draft_sha: 56be4dfb061eb64a45ac6ae5d11f5b259051db34006a53ff35125c3c6d48c005
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: NVDA
@@ -470,7 +470,7 @@ proposals:
     excerpt: A majority of our DRAM production output in 2026 was from our fabrication facilities in Taiwan
     excerpt_verified: true
   draft_sha: 3a7125135b80e101283af600a57ab2b149cedf6e3aeca0481b83c45a902dad13
-  decision: pending
+  decision: accept
   reason: null
   edge:
     source: MU
