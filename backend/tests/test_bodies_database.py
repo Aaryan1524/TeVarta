@@ -18,7 +18,8 @@ BODY = (
     "power had been restored to the main science parks by midday and that no major "
     "structural damage was reported. SanDisk said its suppliers in the region were assessing "
     "the impact on flash memory output, and analysts expected short delays rather than "
-    "lasting shortages. Shipping through the main ports continued normally."
+    "lasting shortages. Shipping through the main ports continued normally, and SanDisk "
+    "said it would update customers."
 )
 
 
@@ -261,3 +262,39 @@ def test_metadata_stage_hands_tier_one_and_two_to_the_body_stage(catalog, monkey
     assert queued == [(tier_one["article_id"], "default", False),
                       (tier_two["article_id"], "default", False)]
     assert (tier_three["tier"], tier_three["body_mode"]) == (3, None)
+
+
+def test_body_tags_need_two_mentions_unless_written_as_an_identifier(catalog, tmp_path):
+    article_id, url, _ = article(catalog, "Taiwan harbour notice")
+    body = ("Aside: SanDisk is mentioned once. Elsewhere $SNDK appears. "
+            + unique_body().replace("SanDisk", "a supplier"))
+    connection, body_stage, _ = stage(catalog, tmp_path, {url: body}, Embedder())
+    with connection:
+        result = body_stage.process(article_id)
+    with psycopg.connect(catalog) as check:
+        found = {row[0] for row in check.execute(
+            "SELECT entity_id FROM article_entities WHERE article_id = %s AND found_in = 'body'",
+            (article_id,)).fetchall()}
+    # One plain mention is dropped; there is no $SNDK identifier alias in this catalog.
+    assert "ent_t21_sandisk" not in found and result.body_entities_added == 0
+
+
+def test_stoplisted_names_never_tag_from_a_body(catalog, tmp_path):
+    from app.bodies import load_body_stoplist
+
+    assert {"nasdaq", "senior", "people"} <= load_body_stoplist()
+    with psycopg.connect(catalog) as setup:
+        setup.execute("""INSERT INTO entities (entity_id, canonical_name, type, status)
+                         VALUES ('ent_t21_nasdaq', 'NASDAQ, INC.', 'Company', 'catalog')
+                         ON CONFLICT DO NOTHING""")
+        setup.execute("""INSERT INTO entity_aliases VALUES ('nasdaq', 'ent_t21_nasdaq', 'test', 1,
+                         false) ON CONFLICT DO NOTHING""")
+    article_id, url, _ = article(catalog, "Taiwan harbour notice two")
+    body = "The Nasdaq Stock Market lists it. Nasdaq rules apply. Nasdaq again. " + unique_body()
+    connection, body_stage, _ = stage(catalog, tmp_path, {url: body}, Embedder())
+    with connection:
+        body_stage.process(article_id)
+    with psycopg.connect(catalog) as check:
+        assert check.execute(
+            "SELECT count(*) FROM article_entities WHERE article_id = %s AND entity_id = %s",
+            (article_id, "ent_t21_nasdaq")).fetchone() == (0,)
